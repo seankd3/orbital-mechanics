@@ -60,12 +60,12 @@ class Planet {
     
     /**
      * Calculate gravitational force on an object
-     * @param {THREE.Vector3} objectPosition - Position of the object
+     * @param {THREE.Vector3} objectPosition - Position of the object in real-world units
      * @param {number} objectMass - Mass of the object
-     * @returns {THREE.Vector3} - Force vector in Newtons
+     * @returns {THREE.Vector3} - Force vector in Newtons (real-world units)
      */
     calculateGravitationalForce(objectPosition, objectMass) {
-        // Calculate distance vector from planet center to object
+        // Calculate distance vector from planet center to object (real-world units)
         const distanceVector = objectPosition.clone().sub(this.mesh.position);
         const distance = distanceVector.length();
         
@@ -80,9 +80,9 @@ class Planet {
     }
     
     /**
-     * Calculate escape velocity at given distance
-     * @param {number} distance - Distance from planet center in meters
-     * @returns {number} - Escape velocity in m/s
+     * Calculate escape velocity at given distance (returns value in real-world units)
+     * @param {number} distance - Distance from planet center in meters (real-world units)
+     * @returns {number} - Escape velocity in m/s (real-world units)
      */
     calculateEscapeVelocity(distance) {
         // v_escape = sqrt(2 * G * M / r)
@@ -90,9 +90,9 @@ class Planet {
     }
     
     /**
-     * Calculate orbital velocity for a circular orbit at given distance
-     * @param {number} distance - Distance from planet center in meters
-     * @returns {number} - Orbital velocity in m/s
+     * Calculate orbital velocity for a circular orbit at given distance (returns value in real-world units)
+     * @param {number} distance - Distance from planet center in meters (real-world units)
+     * @returns {number} - Orbital velocity in m/s (real-world units)
      */
     calculateOrbitalVelocity(distance) {
         // v_orbit = sqrt(G * M / r)

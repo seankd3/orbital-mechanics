@@ -385,30 +385,89 @@ class Scene {
         // Skip if spacecraft doesn't exist
         if (!this.spacecraft) return;
         
+        // Debug first few frames
+        if (this._frameCounter === undefined) {
+            this._frameCounter = 0;
+        }
+        
+        if (this._frameCounter < 5) {
+            console.log(`[Frame ${this._frameCounter}] DEBUG: Spacecraft position: `, 
+                this.spacecraft.position.x.toFixed(4), 
+                this.spacecraft.position.y.toFixed(4), 
+                this.spacecraft.position.z.toFixed(4));
+            console.log(`[Frame ${this._frameCounter}] DEBUG: Spacecraft velocity: `, 
+                this.spacecraft.velocity.x.toFixed(4), 
+                this.spacecraft.velocity.y.toFixed(4), 
+                this.spacecraft.velocity.z.toFixed(4));
+                
+            // Check distance to planet
+            if (this.planet) {
+                const distanceVector = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+                const distance = distanceVector.length();
+                console.log(`[Frame ${this._frameCounter}] DEBUG: Distance to planet center: ${distance.toFixed(4)}`);
+                console.log(`[Frame ${this._frameCounter}] DEBUG: Planet radius: ${this.planet.radius.toFixed(4)}`);
+                if (distance < this.planet.radius) {
+                    console.warn(`[Frame ${this._frameCounter}] WARNING: Spacecraft inside planet! distance=${distance.toFixed(4)}, radius=${this.planet.radius.toFixed(4)}`);
+                }
+            }
+            
+            this._frameCounter++;
+        }
+        
         // Apply gravitational forces from planet if exists
         if (this.planet) {
-            // Get scale factor from main.js for physics calculations
-            const SCALE_FACTOR = window.SCALE_FACTOR || 0.001;
+            // Get scale manager for physics calculations
+            const scaleManager = window.scaleManager;
             
-            // Calculate gravitational force - using unscaled distance for physics
-            const scaledDistanceVector = this.spacecraft.position.clone().sub(this.planet.mesh.position);
-            const scaledDistance = scaledDistanceVector.length();
+            if (!scaleManager) {
+                console.error("ScaleManager not found. Physics calculations may be inaccurate.");
+                return;
+            }
             
-            // Convert to real-world distance for physics calculations
-            const realDistance = scaledDistance / SCALE_FACTOR;
-            const realDistanceVector = scaledDistanceVector.clone().normalize().multiplyScalar(realDistance);
+            // Calculate gravitational force using real-world distances
+            // Get current spacecraft position in visualization space
+            const spacecraftVisualPos = this.spacecraft.position.clone();
+            const planetVisualPos = this.planet.mesh.position.clone();
             
-            // Calculate gravitational force using real-world values
-            const gravity = this.planet.calculateGravitationalForce(
-                this.planet.mesh.position.clone().add(realDistanceVector),
+            // Convert to real-world space for physics calculations
+            const spacecraftRealPos = scaleManager.vectorToRealWorld(spacecraftVisualPos);
+            const planetRealPos = scaleManager.vectorToRealWorld(planetVisualPos);
+            
+            // Calculate distance to planet center
+            const distanceVector = spacecraftVisualPos.clone().sub(planetVisualPos);
+            const distance = distanceVector.length();
+            
+            // Check for collision with planet and prevent it
+            if (distance < this.planet.radius) {
+                console.warn(`Spacecraft collision with planet detected! Distance: ${distance.toFixed(2)}, Planet radius: ${this.planet.radius.toFixed(2)}`);
+                
+                // Move spacecraft to surface of planet
+                const newPosition = distanceVector.normalize().multiplyScalar(this.planet.radius * 1.01).add(planetVisualPos);
+                this.spacecraft.setPosition(newPosition);
+                
+                // Reflect velocity to simulate bounce
+                const normal = distanceVector.normalize();
+                const reflectedVelocity = this.spacecraft.velocity.clone()
+                    .sub(normal.multiplyScalar(2 * this.spacecraft.velocity.dot(normal)))
+                    .multiplyScalar(0.8); // Dampen velocity
+                
+                this.spacecraft.setVelocity(reflectedVelocity);
+                
+                // Skip further physics for this frame
+                return;
+            }
+            
+            // Calculate gravitational force in real-world units
+            const realForce = this.planet.calculateGravitationalForce(
+                spacecraftRealPos,
                 this.spacecraft.mass
             );
             
-            // Scale the force back down for visualization
-            gravity.multiplyScalar(SCALE_FACTOR);
+            // Convert force back to visualization space
+            const visualForce = scaleManager.vectorToVisualizationSpace(realForce);
             
-            // Convert force to acceleration (F = ma, so a = F/m)
-            const acceleration = gravity.divideScalar(this.spacecraft.mass);
+            // Apply force to spacecraft (F=ma, so a=F/m)
+            const acceleration = visualForce.divideScalar(this.spacecraft.mass);
             
             // Apply acceleration to velocity (v = v0 + at)
             this.spacecraft.velocity.add(acceleration.multiplyScalar(deltaTime));
@@ -502,19 +561,33 @@ class Scene {
      * @returns {Object} Object containing orbital parameters
      */
     calculateOrbitalParameters() {
-        if (!this.planet || !this.spacecraft) return null;
+        if (!this.planet || !this.spacecraft) {
+            console.log("DEBUG: calculateOrbitalParameters - planet or spacecraft not available");
+            return null;
+        }
         
-        // Get scale factor for physics calculations
-        const SCALE_FACTOR = window.SCALE_FACTOR || 0.001;
+        // Get scale manager for physics calculations
+        const scaleManager = window.scaleManager;
+        
+        if (!scaleManager) {
+            console.error("ScaleManager not found. Orbital calculations may be inaccurate.");
+            return null;
+        }
         
         // Get gravitational parameter (GM)
         const mu = this.planet.G * this.planet.mass;
         
         // Get real-world position and velocity of spacecraft relative to planet
         const scaledPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
-        const realPosition = scaledPosition.clone().multiplyScalar(1/SCALE_FACTOR);
+        const realPosition = scaleManager.vectorToRealWorld(scaledPosition);
         
-        const realVelocity = this.spacecraft.velocity.clone().multiplyScalar(1/SCALE_FACTOR);
+        const realVelocity = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
+        
+        console.log("DEBUG: calculateOrbitalParameters inputs:");
+        console.log("  Scaled position:", scaledPosition.x.toFixed(2), scaledPosition.y.toFixed(2), scaledPosition.z.toFixed(2));
+        console.log("  Real position:", realPosition.x.toFixed(2), realPosition.y.toFixed(2), realPosition.z.toFixed(2));
+        console.log("  Real velocity:", realVelocity.x.toFixed(2), realVelocity.y.toFixed(2), realVelocity.z.toFixed(2));
+        console.log("  Gravitational parameter (mu):", mu);
         
         // Calculate orbital elements
         
@@ -564,6 +637,14 @@ class Scene {
             orbitalPeriod = 2 * Math.PI * Math.sqrt(Math.pow(semiMajorAxis, 3) / mu);
         }
         
+        console.log("DEBUG: calculateOrbitalParameters results:");
+        console.log("  h magnitude:", hMagnitude);
+        console.log("  Eccentricity:", eccentricity);
+        console.log("  Semi-major axis:", semiMajorAxis);
+        console.log("  Periapsis:", periapsis);
+        console.log("  Apoapsis:", apoapsis);
+        console.log("  Orbital period:", orbitalPeriod);
+        
         // Return orbital parameters
         return {
             eccentricity: eccentricity,
@@ -582,17 +663,27 @@ class Scene {
      * Update the display with current physics data
      */
     updateDisplay() {
-        if (!this.spacecraft) return;
+        if (!this.spacecraft) {
+            console.log("DEBUG: updateDisplay - spacecraft not available");
+            return;
+        }
         
-        // Scale factor for converting display values
-        const SCALE_FACTOR = window.SCALE_FACTOR || 0.001;
+        // Get scale manager for converting display values
+        const scaleManager = window.scaleManager;
+        
+        if (!scaleManager) {
+            console.warn("ScaleManager not found. Display values may be inaccurate.");
+            return;
+        }
         
         // Update velocity display
         const velocity = document.getElementById('velocity');
         if (velocity) {
             // Convert scaled velocity to real-world velocity
-            const realVelocity = this.spacecraft.velocity.length() / SCALE_FACTOR;
+            const realVelocity = scaleManager.velocityToRealWorld(this.spacecraft.velocity.length());
             velocity.textContent = realVelocity.toFixed(2);
+        } else {
+            console.log("DEBUG: velocity element not found");
         }
         
         // Update orientation display
@@ -600,76 +691,95 @@ class Scene {
         if (orientation) {
             // Extract Euler angles from quaternion
             const euler = new THREE.Euler().setFromQuaternion(this.spacecraft.mesh.quaternion);
-            orientation.textContent = 
-                `${(euler.x * 180 / Math.PI).toFixed(1)}°, ` +
-                `${(euler.y * 180 / Math.PI).toFixed(1)}°, ` +
-                `${(euler.z * 180 / Math.PI).toFixed(1)}°`;
+            const pitch = THREE.MathUtils.radToDeg(euler.x).toFixed(1);
+            const yaw = THREE.MathUtils.radToDeg(euler.y).toFixed(1);
+            const roll = THREE.MathUtils.radToDeg(euler.z).toFixed(1);
+            orientation.textContent = `P: ${pitch}° Y: ${yaw}° R: ${roll}°`;
+        } else {
+            console.log("DEBUG: orientation element not found");
         }
         
         // Update thrust status
         const thrustStatus = document.getElementById('thrust-status');
         if (thrustStatus) {
             thrustStatus.textContent = this.spacecraft.isThrusting ? 'ON' : 'OFF';
+        } else {
+            console.log("DEBUG: thrust-status element not found");
         }
         
-        // If we have a planet, show orbital information
-        if (this.planet && this.spacecraft) {
-            const scaledDistanceVector = this.spacecraft.position.clone().sub(this.planet.mesh.position);
-            const scaledDistance = scaledDistanceVector.length();
+        // Update altitude display
+        const altitude = document.getElementById('altitude');
+        if (altitude && this.planet) {
+            // Calculate distance from planet center to spacecraft
+            const distanceVector = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+            const distance = distanceVector.length();
             
-            // Convert to real-world values
-            const realDistance = scaledDistance / SCALE_FACTOR;
-            const realAltitude = realDistance - (this.planet.radius / SCALE_FACTOR);
+            // Convert to real-world distance
+            const realDistance = scaleManager.toRealWorld(distance);
             
-            // Update altitude display if element exists
-            const altitudeElement = document.getElementById('altitude');
-            if (altitudeElement) {
-                // Convert to km for display
-                altitudeElement.textContent = (realAltitude / 1000).toFixed(1);
+            // Calculate altitude (distance minus planet radius)
+            const realAltitude = realDistance - scaleManager.toRealWorld(this.planet.radius);
+            
+            // Convert to kilometers for display
+            const altitudeKm = realAltitude / 1000;
+            altitude.textContent = altitudeKm.toFixed(2);
+        } else {
+            console.log("DEBUG: altitude element not found or planet not available");
+        }
+        
+        // Update orbital parameters display
+        const orbit = this.calculateOrbitalParameters();
+        if (orbit) {
+            // Update apogee (km) - match HTML element ID
+            const apogee = document.getElementById('apogee');
+            if (apogee) {
+                // Calculate apogee as altitude above surface (subtract planet radius)
+                const planetRadiusKm = scaleManager.toRealWorld(this.planet.radius) / 1000;
+                const apogeeAltitudeKm = orbit.apoapsis / 1000 - planetRadiusKm;
+                apogee.textContent = apogeeAltitudeKm.toFixed(2);
+            } else {
+                console.log("DEBUG: apogee element not found");
             }
             
-            // Calculate orbital parameters and update displays
-            const orbitalParams = this.calculateOrbitalParameters();
-            if (orbitalParams) {
-                // Update perigee (km)
-                const perigeeElement = document.getElementById('perigee');
-                if (perigeeElement) {
-                    perigeeElement.textContent = ((orbitalParams.periapsis - this.planet.radius/SCALE_FACTOR) / 1000).toFixed(1);
-                }
-                
-                // Update apogee (km)
-                const apogeeElement = document.getElementById('apogee');
-                if (apogeeElement) {
-                    if (orbitalParams.apoapsis === Infinity) {
-                        apogeeElement.textContent = "Escape";
-                    } else {
-                        apogeeElement.textContent = ((orbitalParams.apoapsis - this.planet.radius/SCALE_FACTOR) / 1000).toFixed(1);
-                    }
-                }
-                
-                // Update eccentricity
-                const eccentricityElement = document.getElementById('eccentricity');
-                if (eccentricityElement) {
-                    eccentricityElement.textContent = orbitalParams.eccentricity.toFixed(3);
-                }
-                
-                // Update orbital period (min)
-                const periodElement = document.getElementById('orbital-period');
-                if (periodElement) {
-                    if (orbitalParams.eccentricity < 1) {
-                        // Convert from seconds to minutes
-                        periodElement.textContent = (orbitalParams.orbitalPeriod / 60).toFixed(1);
-                    } else {
-                        periodElement.textContent = "N/A";
-                    }
-                }
-                
-                // Update semi-major axis (km)
-                const semiMajorElement = document.getElementById('semi-major-axis');
-                if (semiMajorElement) {
-                    semiMajorElement.textContent = (orbitalParams.semiMajorAxis / 1000).toFixed(1);
-                }
+            // Update perigee (km) - match HTML element ID
+            const perigee = document.getElementById('perigee');
+            if (perigee) {
+                // Calculate perigee as altitude above surface (subtract planet radius)
+                const planetRadiusKm = scaleManager.toRealWorld(this.planet.radius) / 1000;
+                const perigeeAltitudeKm = orbit.periapsis / 1000 - planetRadiusKm;
+                perigee.textContent = perigeeAltitudeKm.toFixed(2);
+            } else {
+                console.log("DEBUG: perigee element not found");
             }
+            
+            // Update eccentricity
+            const eccentricity = document.getElementById('eccentricity');
+            if (eccentricity) {
+                eccentricity.textContent = orbit.eccentricity.toFixed(6);
+            } else {
+                console.log("DEBUG: eccentricity element not found");
+            }
+            
+            // Update orbital period (min) - match HTML element ID
+            const orbitalPeriod = document.getElementById('orbital-period');
+            if (orbitalPeriod) {
+                // Convert from seconds to minutes for display
+                const periodMinutes = orbit.orbitalPeriod / 60;
+                orbitalPeriod.textContent = periodMinutes.toFixed(2);
+            } else {
+                console.log("DEBUG: orbital-period element not found");
+            }
+            
+            // Update semi-major axis (km)
+            const semiMajorAxis = document.getElementById('semi-major-axis');
+            if (semiMajorAxis) {
+                const semiMajorAxisKm = orbit.semiMajorAxis / 1000;
+                semiMajorAxis.textContent = semiMajorAxisKm.toFixed(2);
+            } else {
+                console.log("DEBUG: semi-major-axis element not found");
+            }
+        } else {
+            console.log("DEBUG: No orbital parameters available");
         }
     }
     
