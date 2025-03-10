@@ -1,5 +1,17 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [1.4.0] - 2025-03-10
+
+### Added
+- Added visual orbital trajectory representation that shows the spacecraft's orbit path
+- Implemented automatic orbital path updates when spacecraft's orbit changes
+- Created glowing cyan path for optimal visibility in space environment
+
+### Technical Changes
+- Added orbital plane orientation calculation for accurate 3D trajectory display
+- Implemented efficient update mechanism to maintain performance
+- Utilized THREE.js BufferGeometry and Line for rendering the orbital path
+
 ## [1.3.0] - 2025-03-10
 
 ### Added
