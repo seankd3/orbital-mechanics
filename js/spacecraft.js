@@ -9,7 +9,7 @@ class Spacecraft {
         // Initialize physics properties
         this.position = new THREE.Vector3(0, 0, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
-        this.thrust = 2000; // N
+        this.thrust = 200000; // N (real-world value)
         this.mass = 20000; // kg
         this.direction = new THREE.Vector3(0, 0, 1); // Forward direction
         
@@ -173,14 +173,89 @@ class Spacecraft {
     }
     
     /**
+     * Apply thrust to the spacecraft
+     * @param {boolean} thrusting - Whether thrust is being applied
+     */
+    applyThrust(thrusting) {
+        this.isThrusting = thrusting;
+    }
+    
+    /**
+     * Set the thrust state
+     * @param {boolean} thrusting - Whether thrust is being applied
+     */
+    setThrust(thrusting) {
+        this.isThrusting = thrusting;
+    }
+    
+    /**
+     * Apply rotation around a specific axis
+     * @param {string} axis - Which axis to rotate around (pitch, yaw, roll)
+     * @param {number} direction - Direction of rotation (-1 or 1)
+     */
+    rotate(axis, direction) {
+        const acceleration = this.rotationControl.rotationAcceleration * direction;
+        
+        switch(axis) {
+            case 'pitch':
+                this.angularVelocity.x += acceleration;
+                break;
+            case 'yaw':
+                this.angularVelocity.y += acceleration;
+                break;
+            case 'roll':
+                this.angularVelocity.z += acceleration;
+                break;
+        }
+        
+        // Clamp angular velocity to maximum rotation rate
+        if (this.angularVelocity.x > this.rotationControl.maxRotationRate) {
+            this.angularVelocity.x = this.rotationControl.maxRotationRate;
+        }
+        if (this.angularVelocity.x < -this.rotationControl.maxRotationRate) {
+            this.angularVelocity.x = -this.rotationControl.maxRotationRate;
+        }
+        
+        if (this.angularVelocity.y > this.rotationControl.maxRotationRate) {
+            this.angularVelocity.y = this.rotationControl.maxRotationRate;
+        }
+        if (this.angularVelocity.y < -this.rotationControl.maxRotationRate) {
+            this.angularVelocity.y = -this.rotationControl.maxRotationRate;
+        }
+        
+        if (this.angularVelocity.z > this.rotationControl.maxRotationRate) {
+            this.angularVelocity.z = this.rotationControl.maxRotationRate;
+        }
+        if (this.angularVelocity.z < -this.rotationControl.maxRotationRate) {
+            this.angularVelocity.z = -this.rotationControl.maxRotationRate;
+        }
+    }
+    
+    /**
      * Update position based on physics
      * @param {number} deltaTime Time since last update in seconds
      */
     update(deltaTime) {
         // If thrusting, apply force in the forward direction
         if (this.isThrusting) {
+            // Get the forward direction vector
             const thrustVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-            const acceleration = thrustVector.multiplyScalar(this.thrust / this.mass);
+            
+            // Calculate acceleration in visualization space
+            const scaleManager = window.scaleManager;
+            let acceleration;
+            
+            if (scaleManager) {
+                // Real-world thrust and mass create real-world acceleration
+                const realAcceleration = thrustVector.clone().multiplyScalar(this.thrust / this.mass);
+                
+                // Convert to visualization space
+                acceleration = scaleManager.vectorToVisualizationSpace(realAcceleration);
+            } else {
+                // Fallback if scale manager isn't available
+                acceleration = thrustVector.multiplyScalar(this.thrust / this.mass);
+            }
+            
             this.velocity.add(acceleration.multiplyScalar(deltaTime));
             
             // Update thruster visuals
@@ -201,75 +276,52 @@ class Spacecraft {
             // Convert angular velocity to rotation in this frame
             const deltaRotation = this.angularVelocity.clone().multiplyScalar(deltaTime);
             
-            // Apply rotation to each axis
-            if (deltaRotation.x !== 0) {
-                this.mesh.rotateX(deltaRotation.x);
-            }
-            if (deltaRotation.y !== 0) {
-                this.mesh.rotateY(deltaRotation.y);
-            }
-            if (deltaRotation.z !== 0) {
-                this.mesh.rotateZ(deltaRotation.z);
-            }
+            // Apply rotation using quaternions for better numerical stability
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromEuler(new THREE.Euler(
+                deltaRotation.x,
+                deltaRotation.y,
+                deltaRotation.z,
+                'XYZ'
+            ));
             
-            // No damping in vacuum - angular velocity maintains unless countered by RCS
-            // this line is commented out: this.angularVelocity.multiplyScalar(this.rotationControl.rotationDamping);
+            this.mesh.quaternion.premultiply(quaternion);
             
-            // If angular velocity is very small, zero it out to prevent tiny rotations (numerical stability)
-            if (this.angularVelocity.length() < 0.0001) {
-                this.angularVelocity.set(0, 0, 0);
-            }
+            // Apply damping to angular velocity
+            this.angularVelocity.multiplyScalar(this.rotationControl.rotationDamping);
         }
     }
     
     /**
-     * Set thruster state
-     * @param {boolean} state 
+     * Get the real-world thrust value in Newtons
+     * @returns {number} Thrust in Newtons
      */
-    setThrust(state) {
-        this.isThrusting = state;
+    getRealThrust() {
+        return this.thrust;
     }
     
     /**
-     * Rotate the spacecraft in a specific axis
-     * @param {string} axis - The axis of rotation: 'pitch', 'yaw', or 'roll'
-     * @param {number} direction - Direction of rotation: 1 or -1
+     * Set the thrust value in real-world units (Newtons)
+     * @param {number} newThrust - Thrust in Newtons
      */
-    rotate(axis, direction) {
-        const acceleration = this.rotationControl.rotationAcceleration * direction;
-        
-        switch (axis) {
-            case 'pitch':
-                // Apply angular acceleration, clamping to max rotation rate
-                this.angularVelocity.x += acceleration;
-                this.angularVelocity.x = Math.max(
-                    -this.rotationControl.maxRotationRate,
-                    Math.min(this.rotationControl.maxRotationRate, this.angularVelocity.x)
-                );
-                break;
-            case 'yaw':
-                this.angularVelocity.y += acceleration;
-                this.angularVelocity.y = Math.max(
-                    -this.rotationControl.maxRotationRate,
-                    Math.min(this.rotationControl.maxRotationRate, this.angularVelocity.y)
-                );
-                break;
-            case 'roll':
-                this.angularVelocity.z += acceleration;
-                this.angularVelocity.z = Math.max(
-                    -this.rotationControl.maxRotationRate,
-                    Math.min(this.rotationControl.maxRotationRate, this.angularVelocity.z)
-                );
-                break;
-        }
+    setRealThrust(newThrust) {
+        this.thrust = newThrust;
     }
     
     /**
-     * Apply rotation to a specific axis
-     * @param {THREE.Vector3} axis - Normalized axis vector
-     * @param {number} angle - Angle of rotation in radians
+     * Set spacecraft position and sync with mesh
+     * @param {THREE.Vector3} newPosition - New position in visualization space
      */
-    rotateOnAxis(axis, angle) {
-        this.mesh.rotateOnAxis(axis, angle);
+    setPosition(newPosition) {
+        this.position.copy(newPosition);
+        this.mesh.position.copy(newPosition);
+    }
+    
+    /**
+     * Set spacecraft velocity
+     * @param {THREE.Vector3} newVelocity - New velocity in visualization space
+     */
+    setVelocity(newVelocity) {
+        this.velocity.copy(newVelocity);
     }
 }

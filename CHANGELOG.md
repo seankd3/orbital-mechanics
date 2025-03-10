@@ -1,5 +1,21 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [1.3.0] - 2025-03-10
+
+### Added
+- Added collision detection to prevent spacecraft from flying through the planet
+- Added frame-by-frame debugging information for spacecraft position and velocity
+
+### Changed
+- Improved orbital velocity calculation to ensure stable circular orbits
+- Updated perigee and apogee displays to show altitude above surface instead of distance from center
+- Increased spacecraft thrust from 20,000N to 200,000N for better maneuverability
+
+### Fixed
+- Fixed missing ScaleManager reference in HTML which caused initialization errors
+- Fixed orbital mechanics calculations to ensure proper perpendicular velocity vectors
+- Fixed issue where spacecraft would fall toward the planet despite correct orbital parameters
+
 ## [1.2.0] - 2025-03-10
 
 ### Added
