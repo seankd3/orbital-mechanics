@@ -158,61 +158,39 @@ class Scene {
      * Add background stars
      */
     addStars() {
-        // Create a large sphere for the starfield background
-        const starfieldRadius = 100000;
-        const starfieldGeometry = new THREE.SphereGeometry(starfieldRadius, 32, 32);
-        
-        // Create stars texture procedurally
-        const canvas = document.createElement('canvas');
-        canvas.width = 2048;
-        canvas.height = 1024;
-        const context = canvas.getContext('2d');
-        context.fillStyle = '#000000';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Add stars of varying brightness
-        for (let i = 0; i < 10000; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const radius = Math.random() * 1.2;
-            
-            // Random brightness for stars
-            const brightness = Math.random() * 100 + 50;
-            context.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 1)`;
-            
-            context.beginPath();
-            context.arc(x, y, radius, 0, Math.PI * 2);
-            context.fill();
-        }
-        
-        // Create texture from canvas
-        const starfieldTexture = new THREE.CanvasTexture(canvas);
-        
-        // Use basic material with the texture on the inside of the sphere
-        const starfieldMaterial = new THREE.MeshBasicMaterial({
-            map: starfieldTexture,
-            side: THREE.BackSide // Render on the inside of the sphere
-        });
-        
-        // Create the mesh and add to scene
-        const starfieldMesh = new THREE.Mesh(starfieldGeometry, starfieldMaterial);
-        this.scene.add(starfieldMesh);
-        
-        // Also add some closer, brighter stars as points
+        // Create multiple star layers for parallax effect and better depth
+        this.createStarLayer(10000, 0.008, 50000, 0xffffff);  // Distant small stars
+        this.createStarLayer(3000, 0.015, 20000, 0xf8f8ff);   // Medium distance stars
+        this.createStarLayer(1000, 0.025, 10000, 0xffffff);   // Closer, brighter stars
+        this.createStarLayer(100, 0.04, 5000, 0xf0f0ff);      // Few very bright stars
+    }
+    
+    /**
+     * Creates a layer of stars
+     * @param {number} count - How many stars to create
+     * @param {number} size - Size of the stars
+     * @param {number} radius - Radius of the distribution sphere
+     * @param {number} color - Color of the stars
+     */
+    createStarLayer(count, size, radius, color) {
         const starsGeometry = new THREE.BufferGeometry();
         const starsMaterial = new THREE.PointsMaterial({
-            color: 0xffffff,
-            size: 0.01
+            color: color,
+            size: size,
+            sizeAttenuation: true
         });
         
         const starsVertices = [];
-        for (let i = 0; i < 1000; i++) {
-            const x = THREE.MathUtils.randFloatSpread(1000);
-            const y = THREE.MathUtils.randFloatSpread(1000);
-            const z = THREE.MathUtils.randFloatSpread(1000);
+        for (let i = 0; i < count; i++) {
+            // Use random points on sphere surface instead of within volume
+            // This creates a more even distribution
+            const phi = Math.acos(-1 + (2 * Math.random()));
+            const theta = 2 * Math.PI * Math.random();
             
-            // Keep stars away from the center
-            if (Math.sqrt(x*x + y*y + z*z) < 50) continue;
+            // Spherical to Cartesian conversion
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
             
             starsVertices.push(x, y, z);
         }
