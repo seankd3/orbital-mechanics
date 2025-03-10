@@ -42,7 +42,7 @@ class Spacecraft {
         const createMaterials = () => {
             // Solid base material (slightly darker)
             const solidMaterial = new THREE.MeshBasicMaterial({
-                color: 0x444444,
+                color: 0x000000,
                 polygonOffset: true,
                 polygonOffsetFactor: 1,
                 polygonOffsetUnits: 1
@@ -77,9 +77,9 @@ class Spacecraft {
         };
         
         // 1. Command Module (CM) - Cone
-        const cmGeometry = new THREE.ConeGeometry(1, 2, 8);
+        const cmGeometry = new THREE.ConeGeometry(1, 1.5, 8);
         const cm = createEdgedMesh(cmGeometry);
-        cm.position.z = 2; // Position at front (z-forward)
+        cm.position.z = 1.75; // Position at front (z-forward)
         cm.rotation.x = Math.PI / 2; // Point forward along Z
         spacecraftGroup.add(cm);
         
@@ -91,14 +91,14 @@ class Spacecraft {
         spacecraftGroup.add(sm);
         
         // 3. Engine - Cone
-        const engineGeometry = new THREE.ConeGeometry(0.8, 1, 8);
+        const engineGeometry = new THREE.ConeGeometry(0.8, 1.5, 8);
         const engine = createEdgedMesh(engineGeometry);
         engine.rotation.x = Math.PI / 2;
         engine.position.z = -1.5;
         spacecraftGroup.add(engine);
         
         // 5. Add RCS thrusters as small cubes
-        const rcsGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+        const rcsGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
         
         // Add 4 RCS thrusters around the service module end
         for (let i = 0; i < 4; i++) {
@@ -114,7 +114,7 @@ class Spacecraft {
         this.direction = new THREE.Vector3(0, 0, 1);
         
         // Add axis helper to the spacecraft for debugging
-        const axesHelper = new THREE.AxesHelper(3); // Size 3 units
+        const axesHelper = new THREE.AxesHelper(4); // Size 3 units
         // X is red, Y is green, Z is blue
         axesHelper.position.set(0, 0, 0);
         
@@ -125,7 +125,7 @@ class Spacecraft {
             canvas.height = 32;
             const context = canvas.getContext('2d');
             context.fillStyle = color;
-            context.font = '24px Arial';
+            context.font = '24px "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace';
             context.fillText(text, 4, 24);
             
             const texture = new THREE.CanvasTexture(canvas);
@@ -158,16 +158,15 @@ class Spacecraft {
      */
     createThrusterMesh() {
         // Create a cone that simulates the thruster exhaust
-        const thrusterGeometry = new THREE.ConeGeometry(0.5, 2, 8);
+        const thrusterGeometry = new THREE.CylinderGeometry(0.7, 0, 3, 8);
         const thrusterMaterial = new THREE.MeshBasicMaterial({
             color: 0xffff00,
             wireframe: true
         });
         
         const thruster = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
-        thruster.position.z = -2; // Place at the back of the ship
+        thruster.position.z = -3.75; // Place at the back of the ship
         thruster.rotation.x = Math.PI / 2; // Rotate 90 degrees on X axis
-        
         return thruster;
     }
     
