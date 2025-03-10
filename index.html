@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spacecraft Simulator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="info-panel">
+        <h2>Spacecraft Status</h2>
+        <div>
+            Velocity: <span id="velocity" class="data-value">0.0</span> m/s<br>
+            Orientation: <span id="orientation" class="data-value">0.0, 0.0, 0.0</span><br>
+            Thrust: <span id="thrust-status" class="data-value">OFF</span>
+        </div>
+    </div>
+    
+    <div id="controls-panel">
+        <h3>Controls</h3>
+        <p>
+            SPACE: Forward Thrust<br>
+            W/S: Pitch (down/up)<br>
+            A/D: Yaw (left/right)<br>
+            Q/E: Roll (left/right)<br>
+            Mouse Drag: Orbit Camera<br>
+            Mouse Wheel: Zoom In/Out<br>
+            R: Reset Camera Position
+        </p>
+    </div>
+    
+    <!-- Import Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Create directories if they don't exist -->
+    <script>
+        // We'll use these script files
+    </script>
+    
+    <!-- Import our scripts -->
+    <script src="js/spacecraft.js"></script>
+    <script src="js/scene.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
