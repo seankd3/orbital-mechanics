@@ -306,20 +306,70 @@ class Scene {
     }
     
     /**
-     * Process current key states and apply to spacecraft
+     * Update the scene
+     */
+    update() {
+        if (!this.isRunning) return;
+        
+        // Calculate delta time in seconds
+        const deltaTime = this.clock.getDelta();
+        
+        // Process input
+        this.processInput(deltaTime);
+        
+        // Update spacecraft
+        if (this.spacecraft) {
+            this.spacecraft.update(deltaTime);
+        }
+        
+        // Update camera position
+        this.updateCamera();
+        
+        // Render the scene
+        this.renderer.render(this.scene, this.camera);
+        
+        // Request next frame
+        requestAnimationFrame(() => this.update());
+    }
+    
+    /**
+     * Process keyboard input
      */
     processInput(deltaTime) {
         if (!this.spacecraft) return;
         
-        const rotationSpeed = 1.0 * deltaTime;
+        // Forward thrust with spacebar
+        if (this.keys.space) {
+            this.spacecraft.setThrust(true);
+        } else {
+            this.spacecraft.setThrust(false);
+        }
         
-        // Apply rotations using the spacecraft's rotate method for consistent controls
-        if (this.keys.w) this.spacecraft.rotate('pitch', rotationSpeed);     // Pitch down (nose down)
-        if (this.keys.s) this.spacecraft.rotate('pitch', -rotationSpeed);    // Pitch up (nose up)
-        if (this.keys.a) this.spacecraft.rotate('yaw', rotationSpeed);       // Yaw left (nose left)
-        if (this.keys.d) this.spacecraft.rotate('yaw', -rotationSpeed);      // Yaw right (nose right)
-        if (this.keys.q) this.spacecraft.rotate('roll', -rotationSpeed);     // Roll left
-        if (this.keys.e) this.spacecraft.rotate('roll', rotationSpeed);      // Roll right
+        // Rotation controls using persistent physics
+        
+        // Pitch: W/S (down/up) - REVERSED
+        if (this.keys.w) {
+            this.spacecraft.rotate('pitch', 1); // Nose up (reversed)
+        }
+        if (this.keys.s) {
+            this.spacecraft.rotate('pitch', -1); // Nose down (reversed)
+        }
+        
+        // Yaw: A/D (left/right) - REVERSED
+        if (this.keys.a) {
+            this.spacecraft.rotate('yaw', 1); // Nose right (reversed)
+        }
+        if (this.keys.d) {
+            this.spacecraft.rotate('yaw', -1); // Nose left (reversed)
+        }
+        
+        // Roll: Q/E (left/right)
+        if (this.keys.q) {
+            this.spacecraft.rotate('roll', -1); // Roll left
+        }
+        if (this.keys.e) {
+            this.spacecraft.rotate('roll', 1); // Roll right
+        }
     }
     
     /**
@@ -387,42 +437,12 @@ class Scene {
     }
     
     /**
-     * Animation loop
-     */
-    animate() {
-        if (!this.isRunning) return;
-        
-        // Request next frame
-        requestAnimationFrame(() => this.animate());
-        
-        // Get delta time
-        const deltaTime = this.clock.getDelta();
-        
-        // Process input
-        this.processInput(deltaTime);
-        
-        // Update spacecraft
-        if (this.spacecraft) {
-            this.spacecraft.update(deltaTime);
-        }
-        
-        // Update camera to follow spacecraft
-        this.updateCamera();
-        
-        // Update UI
-        this.updateUI();
-        
-        // Render the scene
-        this.renderer.render(this.scene, this.camera);
-    }
-    
-    /**
      * Start the animation loop
      */
     start() {
         this.isRunning = true;
         this.clock.start();
-        this.animate();
+        this.update();
     }
     
     /**

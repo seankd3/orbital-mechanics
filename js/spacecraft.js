@@ -3,26 +3,28 @@
  */
 class Spacecraft {
     constructor() {
-        // Basic properties
-        this.position = new THREE.Vector3(0, 0, 0);
-        this.velocity = new THREE.Vector3(0, 0, 0);
-        this.acceleration = new THREE.Vector3(0, 0, 0);
-        
-        // Rotation using Euler angles
-        this.rotation = new THREE.Euler(0, 0, 0, 'XYZ');
-        
-        // Direction vector
-        this.direction = new THREE.Vector3(0, 0, 1);
-        
-        // Physics properties
-        this.mass = 1000; // kg
-        this.thrust = 2000; // N
-        this.thrustActive = false;
-        
-        // Create the 3D model
+        // Create the mesh
         this.mesh = this.createSpacecraftMesh();
         
-        // Create thruster visual
+        // Initialize physics properties
+        this.position = new THREE.Vector3(0, 0, 0);
+        this.velocity = new THREE.Vector3(0, 0, 0);
+        this.thrust = 2000; // N
+        this.mass = 1000; // kg
+        this.direction = new THREE.Vector3(0, 0, 1); // Forward direction
+        
+        // Add rotational physics properties
+        this.angularVelocity = new THREE.Vector3(0, 0, 0); // rad/s (x=pitch, y=yaw, z=roll)
+        this.rotationControl = {
+            maxRotationRate: 2, // Maximum rotation rate in rad/s
+            rotationAcceleration: 0.01, // How quickly rotation builds up
+            rotationDamping: .999 // No damping in vacuum (1.0 = no slowdown)
+        };
+        
+        // Control state
+        this.isThrusting = false;
+        
+        // Create and add thruster visual
         this.thrusterMesh = this.createThrusterMesh();
         this.mesh.add(this.thrusterMesh);
         this.thrusterMesh.visible = false;
@@ -171,101 +173,103 @@ class Spacecraft {
     }
     
     /**
-     * Apply thrust in the forward direction
-     */
-    applyThrust(active) {
-        this.thrustActive = active;
-        this.thrusterMesh.visible = active;
-    }
-    
-    /**
-     * Rotate the spacecraft on a given axis
-     * @param {string} axis - 'pitch', 'yaw' or 'roll'
-     * @param {number} amount - amount to rotate in radians
-     */
-    rotate(axis, amount) {
-        // Apply rotation to the 3D object
-        if (axis === 'pitch') {
-            // Pitch: rotate around X axis
-            this.mesh.rotateX(amount);
-        } else if (axis === 'yaw') {
-            // Yaw: rotate around Y axis
-            this.mesh.rotateY(amount);
-        } else if (axis === 'roll') {
-            // Roll: rotate around Z axis
-            this.mesh.rotateZ(amount);
-        }
-        
-        // Update direction vector
-        this.direction.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-    }
-    
-    /**
-     * Rotate the spacecraft around the given axis
-     * @param {THREE.Vector3} axis - Axis to rotate around
-     * @param {number} angle - Angle to rotate in radians
-     */
-    rotateOnAxis(axis, angle) {
-        // Create a quaternion for this rotation
-        const q = new THREE.Quaternion();
-        q.setFromAxisAngle(axis.normalize(), angle);
-        
-        // Apply the rotation to the spacecraft mesh
-        this.mesh.quaternion.premultiply(q);
-        
-        // Update the direction vector to match the new orientation
-        this.direction.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-    }
-    
-    /**
-     * Update the spacecraft physics
-     * @param {number} deltaTime - time step in seconds
+     * Update position based on physics
+     * @param {number} deltaTime Time since last update in seconds
      */
     update(deltaTime) {
-        // Reset acceleration
-        this.acceleration.set(0, 0, 0);
-        
-        // Apply thrust if active
-        if (this.thrustActive) {
-            // Calculate thrust direction based on spacecraft orientation
-            const thrustVector = this.direction.clone().multiplyScalar(this.thrust / this.mass);
-            this.acceleration.add(thrustVector);
+        // If thrusting, apply force in the forward direction
+        if (this.isThrusting) {
+            const thrustVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+            const acceleration = thrustVector.multiplyScalar(this.thrust / this.mass);
+            this.velocity.add(acceleration.multiplyScalar(deltaTime));
             
-            // Make the thruster visual pulse
-            this.thrusterMesh.material.opacity = 0.7 + Math.random() * 0.3;
+            // Update thruster visuals
+            this.thrusterMesh.visible = true;
+            this.thrusterMesh.scale.z = 0.8 + Math.random() * 0.4; // Animated thrust
+        } else {
+            // Hide thruster when not thrusting
+            this.thrusterMesh.visible = false;
         }
         
-        // Update velocity using a = F/m
-        this.velocity.add(this.acceleration.clone().multiplyScalar(deltaTime));
-        
-        // Update position
-        this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
-        
-        // Update mesh position
+        // Update position based on velocity
+        const deltaPosition = this.velocity.clone().multiplyScalar(deltaTime);
+        this.position.add(deltaPosition);
         this.mesh.position.copy(this.position);
         
-        // Animate thruster if active
-        if (this.thrustActive) {
-            this.thrusterMesh.scale.z = 0.8 + Math.random() * 0.4;
+        // Apply angular velocity to update rotation
+        if (!this.angularVelocity.equals(new THREE.Vector3(0, 0, 0))) {
+            // Convert angular velocity to rotation in this frame
+            const deltaRotation = this.angularVelocity.clone().multiplyScalar(deltaTime);
+            
+            // Apply rotation to each axis
+            if (deltaRotation.x !== 0) {
+                this.mesh.rotateX(deltaRotation.x);
+            }
+            if (deltaRotation.y !== 0) {
+                this.mesh.rotateY(deltaRotation.y);
+            }
+            if (deltaRotation.z !== 0) {
+                this.mesh.rotateZ(deltaRotation.z);
+            }
+            
+            // No damping in vacuum - angular velocity maintains unless countered by RCS
+            // this line is commented out: this.angularVelocity.multiplyScalar(this.rotationControl.rotationDamping);
+            
+            // If angular velocity is very small, zero it out to prevent tiny rotations (numerical stability)
+            if (this.angularVelocity.length() < 0.0001) {
+                this.angularVelocity.set(0, 0, 0);
+            }
         }
     }
     
     /**
-     * Get the current velocity magnitude in m/s
+     * Set thruster state
+     * @param {boolean} state 
      */
-    getSpeed() {
-        return this.velocity.length();
+    setThrust(state) {
+        this.isThrusting = state;
     }
     
     /**
-     * Get the orientation as Euler angles in degrees
+     * Rotate the spacecraft in a specific axis
+     * @param {string} axis - The axis of rotation: 'pitch', 'yaw', or 'roll'
+     * @param {number} direction - Direction of rotation: 1 or -1
      */
-    getOrientation() {
-        const euler = new THREE.Euler().setFromQuaternion(this.mesh.quaternion);
-        return {
-            x: THREE.MathUtils.radToDeg(euler.x).toFixed(1),
-            y: THREE.MathUtils.radToDeg(euler.y).toFixed(1),
-            z: THREE.MathUtils.radToDeg(euler.z).toFixed(1)
-        };
+    rotate(axis, direction) {
+        const acceleration = this.rotationControl.rotationAcceleration * direction;
+        
+        switch (axis) {
+            case 'pitch':
+                // Apply angular acceleration, clamping to max rotation rate
+                this.angularVelocity.x += acceleration;
+                this.angularVelocity.x = Math.max(
+                    -this.rotationControl.maxRotationRate,
+                    Math.min(this.rotationControl.maxRotationRate, this.angularVelocity.x)
+                );
+                break;
+            case 'yaw':
+                this.angularVelocity.y += acceleration;
+                this.angularVelocity.y = Math.max(
+                    -this.rotationControl.maxRotationRate,
+                    Math.min(this.rotationControl.maxRotationRate, this.angularVelocity.y)
+                );
+                break;
+            case 'roll':
+                this.angularVelocity.z += acceleration;
+                this.angularVelocity.z = Math.max(
+                    -this.rotationControl.maxRotationRate,
+                    Math.min(this.rotationControl.maxRotationRate, this.angularVelocity.z)
+                );
+                break;
+        }
+    }
+    
+    /**
+     * Apply rotation to a specific axis
+     * @param {THREE.Vector3} axis - Normalized axis vector
+     * @param {number} angle - Angle of rotation in radians
+     */
+    rotateOnAxis(axis, angle) {
+        this.mesh.rotateOnAxis(axis, angle);
     }
 }
