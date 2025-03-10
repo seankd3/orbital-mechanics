@@ -10,7 +10,7 @@ class Spacecraft {
         this.position = new THREE.Vector3(0, 0, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.thrust = 2000; // N
-        this.mass = 1000; // kg
+        this.mass = 20000; // kg
         this.direction = new THREE.Vector3(0, 0, 1); // Forward direction
         
         // Add rotational physics properties
