@@ -1,0 +1,44 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #000;
+    color: #5fff5f;
+    font-family: 'Courier New', monospace;
+}
+
+canvas {
+    display: block;
+}
+
+#info-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 10, 0, 0.7);
+    padding: 15px;
+    border: 1px solid #5fff5f;
+    border-radius: 5px;
+    z-index: 100;
+    max-width: 300px;
+}
+
+#controls-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(0, 10, 0, 0.7);
+    padding: 15px;
+    border: 1px solid #5fff5f;
+    border-radius: 5px;
+    z-index: 100;
+}
+
+h2, h3 {
+    margin-top: 0;
+    color: #5fff5f;
+}
+
+.data-value {
+    font-weight: bold;
+}
