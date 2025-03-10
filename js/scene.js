@@ -21,6 +21,9 @@ class Scene {
         // Create a reference to the spacecraft
         this.spacecraft = null;
         
+        // Create a reference to the planet
+        this.planet = null;
+        
         // Setup camera controls
         this.setupControls();
         
@@ -71,7 +74,7 @@ class Scene {
      */
     setupCamera() {
         const aspectRatio = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000000);
         this.camera.position.set(0, 5, 10);
         this.camera.lookAt(0, 0, 0);
     }
@@ -83,6 +86,10 @@ class Scene {
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setClearColor(0x000000);
+        
+        // Enable logarithmic depth buffer for better depth precision
+        this.renderer.logarithmicDepthBuffer = true;
+        
         document.body.appendChild(this.renderer.domElement);
         
         // Handle window resize
@@ -111,10 +118,8 @@ class Scene {
      * Setup grid and axes helpers
      */
     setupHelpers() {
-        // Grid - horizontal in XZ plane
-        const gridHelper = new THREE.GridHelper(100, 10);
-        // Default GridHelper is in XZ plane (y=0), so no rotation needed
-        this.scene.add(gridHelper);
+        // Add some stars in the background
+        this.addStars();
         
         // World origin axes helper
         const worldAxisHelper = new THREE.AxesHelper(5); // 5 units long
@@ -147,29 +152,67 @@ class Scene {
         this.scene.add(worldXLabel);
         this.scene.add(worldYLabel);
         this.scene.add(worldZLabel);
-        
-        // Add some stars in the background
-        this.addStars();
     }
     
     /**
      * Add background stars
      */
     addStars() {
+        // Create a large sphere for the starfield background
+        const starfieldRadius = 100000;
+        const starfieldGeometry = new THREE.SphereGeometry(starfieldRadius, 32, 32);
+        
+        // Create stars texture procedurally
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048;
+        canvas.height = 1024;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#000000';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Add stars of varying brightness
+        for (let i = 0; i < 10000; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const radius = Math.random() * 1.2;
+            
+            // Random brightness for stars
+            const brightness = Math.random() * 100 + 50;
+            context.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 1)`;
+            
+            context.beginPath();
+            context.arc(x, y, radius, 0, Math.PI * 2);
+            context.fill();
+        }
+        
+        // Create texture from canvas
+        const starfieldTexture = new THREE.CanvasTexture(canvas);
+        
+        // Use basic material with the texture on the inside of the sphere
+        const starfieldMaterial = new THREE.MeshBasicMaterial({
+            map: starfieldTexture,
+            side: THREE.BackSide // Render on the inside of the sphere
+        });
+        
+        // Create the mesh and add to scene
+        const starfieldMesh = new THREE.Mesh(starfieldGeometry, starfieldMaterial);
+        this.scene.add(starfieldMesh);
+        
+        // Also add some closer, brighter stars as points
         const starsGeometry = new THREE.BufferGeometry();
         const starsMaterial = new THREE.PointsMaterial({
             color: 0xffffff,
-            size: 0.1
+            size: 0.01
         });
         
         const starsVertices = [];
         for (let i = 0; i < 1000; i++) {
-            const x = THREE.MathUtils.randFloatSpread(100);
-            const y = THREE.MathUtils.randFloatSpread(100);
-            const z = THREE.MathUtils.randFloatSpread(100);
+            const x = THREE.MathUtils.randFloatSpread(1000);
+            const y = THREE.MathUtils.randFloatSpread(1000);
+            const z = THREE.MathUtils.randFloatSpread(1000);
             
             // Keep stars away from the center
-            if (Math.sqrt(x*x + y*y + z*z) < 20) continue;
+            if (Math.sqrt(x*x + y*y + z*z) < 50) continue;
             
             starsVertices.push(x, y, z);
         }
@@ -306,30 +349,95 @@ class Scene {
     }
     
     /**
-     * Update the scene
+     * Add the spacecraft to the scene
+     * @param {Spacecraft} spacecraft The spacecraft object
      */
-    update() {
+    addSpacecraft(spacecraft) {
+        this.spacecraft = spacecraft;
+        this.scene.add(spacecraft.mesh);
+    }
+
+    /**
+     * Add a planet to the scene
+     * @param {Planet} planet The planet object
+     */
+    addPlanet(planet) {
+        this.planet = planet;
+        this.scene.add(planet.mesh);
+    }
+    
+    /**
+     * Execute the animation loop
+     */
+    animate() {
         if (!this.isRunning) return;
         
-        // Calculate delta time in seconds
+        // Schedule the next animation frame
+        requestAnimationFrame(this.animate.bind(this));
+        
+        // Calculate time since last frame
         const deltaTime = this.clock.getDelta();
         
-        // Process input
+        // Process inputs
         this.processInput(deltaTime);
         
-        // Update spacecraft
-        if (this.spacecraft) {
-            this.spacecraft.update(deltaTime);
-        }
+        // Update physics
+        this.updatePhysics(deltaTime);
         
-        // Update camera position
-        this.updateCamera();
+        // Update the camera
+        this.updateCamera(deltaTime);
+        
+        // Update display values
+        this.updateDisplay();
         
         // Render the scene
         this.renderer.render(this.scene, this.camera);
+    }
+    
+    /**
+     * Update physics simulation
+     * @param {number} deltaTime Time delta since last frame (seconds)
+     */
+    updatePhysics(deltaTime) {
+        // Update planet rotation if exists
+        if (this.planet) {
+            this.planet.update(deltaTime);
+        }
         
-        // Request next frame
-        requestAnimationFrame(() => this.update());
+        // Skip if spacecraft doesn't exist
+        if (!this.spacecraft) return;
+        
+        // Apply gravitational forces from planet if exists
+        if (this.planet) {
+            // Get scale factor from main.js for physics calculations
+            const SCALE_FACTOR = window.SCALE_FACTOR || 0.001;
+            
+            // Calculate gravitational force - using unscaled distance for physics
+            const scaledDistanceVector = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+            const scaledDistance = scaledDistanceVector.length();
+            
+            // Convert to real-world distance for physics calculations
+            const realDistance = scaledDistance / SCALE_FACTOR;
+            const realDistanceVector = scaledDistanceVector.clone().normalize().multiplyScalar(realDistance);
+            
+            // Calculate gravitational force using real-world values
+            const gravity = this.planet.calculateGravitationalForce(
+                this.planet.mesh.position.clone().add(realDistanceVector),
+                this.spacecraft.mass
+            );
+            
+            // Scale the force back down for visualization
+            gravity.multiplyScalar(SCALE_FACTOR);
+            
+            // Convert force to acceleration (F = ma, so a = F/m)
+            const acceleration = gravity.divideScalar(this.spacecraft.mass);
+            
+            // Apply acceleration to velocity (v = v0 + at)
+            this.spacecraft.velocity.add(acceleration.multiplyScalar(deltaTime));
+        }
+        
+        // Update spacecraft physics
+        this.spacecraft.update(deltaTime);
     }
     
     /**
@@ -373,20 +481,10 @@ class Scene {
     }
     
     /**
-     * Add the spacecraft to the scene
+     * Update the camera
+     * @param {number} deltaTime Time delta since last frame (seconds)
      */
-    addSpacecraft(spacecraft) {
-        this.spacecraft = spacecraft;
-        this.scene.add(spacecraft.mesh);
-        
-        // Position the camera to look at the spacecraft
-        this.camera.lookAt(spacecraft.position);
-    }
-    
-    /**
-     * Update camera position to follow spacecraft
-     */
-    updateCamera() {
+    updateCamera(deltaTime) {
         if (!this.spacecraft) return;
         
         // Get spacecraft position and orientation
@@ -422,18 +520,179 @@ class Scene {
     }
     
     /**
-     * Update the UI with current spacecraft data
+     * Calculate orbital parameters for the spacecraft's current orbit
+     * @returns {Object} Object containing orbital parameters
      */
-    updateUI() {
+    calculateOrbitalParameters() {
+        if (!this.planet || !this.spacecraft) return null;
+        
+        // Get scale factor for physics calculations
+        const SCALE_FACTOR = window.SCALE_FACTOR || 0.001;
+        
+        // Get gravitational parameter (GM)
+        const mu = this.planet.G * this.planet.mass;
+        
+        // Get real-world position and velocity of spacecraft relative to planet
+        const scaledPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+        const realPosition = scaledPosition.clone().multiplyScalar(1/SCALE_FACTOR);
+        
+        const realVelocity = this.spacecraft.velocity.clone().multiplyScalar(1/SCALE_FACTOR);
+        
+        // Calculate orbital elements
+        
+        // Step 1: Calculate the specific angular momentum vector (h = r × v)
+        const h = new THREE.Vector3().crossVectors(realPosition, realVelocity);
+        const hMagnitude = h.length();
+        
+        // Step 2: Calculate the eccentricity vector
+        // e = ((v × h) / μ) - (r / |r|)
+        const vCrossH = new THREE.Vector3().crossVectors(realVelocity, h);
+        const eccentricityVector = vCrossH.divideScalar(mu).sub(
+            realPosition.clone().normalize()
+        );
+        
+        const eccentricity = eccentricityVector.length();
+        
+        // Step 3: Calculate the semi-major axis
+        // a = h² / (μ * (1 - e²))
+        const r = realPosition.length();
+        const v = realVelocity.length();
+        
+        // Alternative calculation using orbit energy equation
+        // a = -μ / (2 * ε), where ε = v²/2 - μ/r
+        const energy = (v * v / 2) - (mu / r);
+        let semiMajorAxis;
+        
+        // For near-circular orbits, use standard equation
+        if (Math.abs(eccentricity) < 0.0001) {
+            semiMajorAxis = r;
+        } 
+        // For elliptical orbits, use energy equation
+        else if (energy < 0) {
+            semiMajorAxis = -mu / (2 * energy);
+        } 
+        // For parabolic/hyperbolic orbits (not typical for orbital spacecraft)
+        else {
+            semiMajorAxis = Math.abs(hMagnitude * hMagnitude / (mu * (1 - eccentricity * eccentricity)));
+        }
+        
+        // Step 4: Calculate periapsis and apoapsis
+        const periapsis = semiMajorAxis * (1 - eccentricity);
+        const apoapsis = eccentricity < 1 ? semiMajorAxis * (1 + eccentricity) : Infinity;
+        
+        // Step 5: Calculate orbital period (only meaningful for elliptical orbits)
+        let orbitalPeriod = 0;
+        if (eccentricity < 1) {
+            orbitalPeriod = 2 * Math.PI * Math.sqrt(Math.pow(semiMajorAxis, 3) / mu);
+        }
+        
+        // Return orbital parameters
+        return {
+            eccentricity: eccentricity,
+            semiMajorAxis: semiMajorAxis,
+            periapsis: periapsis, // perigee for Earth
+            apoapsis: apoapsis,   // apogee for Earth
+            orbitalPeriod: orbitalPeriod, // in seconds
+            // Additional parameters
+            specificAngularMomentum: hMagnitude,
+            position: r,
+            velocity: v
+        };
+    }
+    
+    /**
+     * Update the display with current physics data
+     */
+    updateDisplay() {
         if (!this.spacecraft) return;
         
-        // Update velocity
-        document.getElementById('velocity').textContent = this.spacecraft.getSpeed().toFixed(2);
+        // Scale factor for converting display values
+        const SCALE_FACTOR = window.SCALE_FACTOR || 0.001;
         
-        // Update orientation
-        const orientation = this.spacecraft.getOrientation();
-        document.getElementById('orientation').textContent = 
-            `${orientation.x}, ${orientation.y}, ${orientation.z}`;
+        // Update velocity display
+        const velocity = document.getElementById('velocity');
+        if (velocity) {
+            // Convert scaled velocity to real-world velocity
+            const realVelocity = this.spacecraft.velocity.length() / SCALE_FACTOR;
+            velocity.textContent = realVelocity.toFixed(2);
+        }
+        
+        // Update orientation display
+        const orientation = document.getElementById('orientation');
+        if (orientation) {
+            // Extract Euler angles from quaternion
+            const euler = new THREE.Euler().setFromQuaternion(this.spacecraft.mesh.quaternion);
+            orientation.textContent = 
+                `${(euler.x * 180 / Math.PI).toFixed(1)}°, ` +
+                `${(euler.y * 180 / Math.PI).toFixed(1)}°, ` +
+                `${(euler.z * 180 / Math.PI).toFixed(1)}°`;
+        }
+        
+        // Update thrust status
+        const thrustStatus = document.getElementById('thrust-status');
+        if (thrustStatus) {
+            thrustStatus.textContent = this.spacecraft.isThrusting ? 'ON' : 'OFF';
+        }
+        
+        // If we have a planet, show orbital information
+        if (this.planet && this.spacecraft) {
+            const scaledDistanceVector = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+            const scaledDistance = scaledDistanceVector.length();
+            
+            // Convert to real-world values
+            const realDistance = scaledDistance / SCALE_FACTOR;
+            const realAltitude = realDistance - (this.planet.radius / SCALE_FACTOR);
+            
+            // Update altitude display if element exists
+            const altitudeElement = document.getElementById('altitude');
+            if (altitudeElement) {
+                // Convert to km for display
+                altitudeElement.textContent = (realAltitude / 1000).toFixed(1);
+            }
+            
+            // Calculate orbital parameters and update displays
+            const orbitalParams = this.calculateOrbitalParameters();
+            if (orbitalParams) {
+                // Update perigee (km)
+                const perigeeElement = document.getElementById('perigee');
+                if (perigeeElement) {
+                    perigeeElement.textContent = ((orbitalParams.periapsis - this.planet.radius/SCALE_FACTOR) / 1000).toFixed(1);
+                }
+                
+                // Update apogee (km)
+                const apogeeElement = document.getElementById('apogee');
+                if (apogeeElement) {
+                    if (orbitalParams.apoapsis === Infinity) {
+                        apogeeElement.textContent = "Escape";
+                    } else {
+                        apogeeElement.textContent = ((orbitalParams.apoapsis - this.planet.radius/SCALE_FACTOR) / 1000).toFixed(1);
+                    }
+                }
+                
+                // Update eccentricity
+                const eccentricityElement = document.getElementById('eccentricity');
+                if (eccentricityElement) {
+                    eccentricityElement.textContent = orbitalParams.eccentricity.toFixed(3);
+                }
+                
+                // Update orbital period (min)
+                const periodElement = document.getElementById('orbital-period');
+                if (periodElement) {
+                    if (orbitalParams.eccentricity < 1) {
+                        // Convert from seconds to minutes
+                        periodElement.textContent = (orbitalParams.orbitalPeriod / 60).toFixed(1);
+                    } else {
+                        periodElement.textContent = "N/A";
+                    }
+                }
+                
+                // Update semi-major axis (km)
+                const semiMajorElement = document.getElementById('semi-major-axis');
+                if (semiMajorElement) {
+                    semiMajorElement.textContent = (orbitalParams.semiMajorAxis / 1000).toFixed(1);
+                }
+            }
+        }
     }
     
     /**
@@ -442,7 +701,7 @@ class Scene {
     start() {
         this.isRunning = true;
         this.clock.start();
-        this.update();
+        this.animate();
     }
     
     /**
