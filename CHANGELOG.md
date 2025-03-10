@@ -1,5 +1,20 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [1.2.0] - 2025-03-10
+
+### Added
+- Implemented centralized controls system that separates input handling from scene management
+- Created dedicated Controls class in new controls.js file
+
+### Changed
+- Refactored keyboard event handling to improve code organization
+- Moved control logic out of Scene class for better separation of concerns
+- Improved modularity of the code structure
+
+### Technical Changes
+- Enhanced maintainability through better code organization
+- Improved extensibility for future control schemes
+
 ## [1.1.0] - 2025-03-10
 
 ### Added
