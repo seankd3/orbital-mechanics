@@ -127,7 +127,7 @@ class Scene {
             canvas.height = 32;
             const context = canvas.getContext('2d');
             context.fillStyle = color;
-            context.font = '24px Arial';
+            context.font = '24px "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace';
             context.fillText(text, 4, 24);
             
             const texture = new THREE.CanvasTexture(canvas);
