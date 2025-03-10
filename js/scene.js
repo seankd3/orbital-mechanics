@@ -24,6 +24,9 @@ class Scene {
         // Create a reference to the planet
         this.planet = null;
         
+        // Create a reference to the orbital trajectory
+        this.orbitalTrajectory = null;
+        
         // Setup camera controls
         this.setupControls();
         
@@ -333,6 +336,9 @@ class Scene {
     addSpacecraft(spacecraft) {
         this.spacecraft = spacecraft;
         this.scene.add(spacecraft.mesh);
+        
+        // Create orbital trajectory visualization when spacecraft is added
+        this.createOrbitalTrajectory();
     }
 
     /**
@@ -424,43 +430,26 @@ class Scene {
                 return;
             }
             
-            // Calculate gravitational force using real-world distances
-            // Get current spacecraft position in visualization space
-            const spacecraftVisualPos = this.spacecraft.position.clone();
-            const planetVisualPos = this.planet.mesh.position.clone();
+            // Check for collision with planet and handle if necessary
+            const collision = physics.handlePlanetCollision(
+                this.spacecraft.position,
+                this.planet.mesh.position,
+                this.planet.radius,
+                this.spacecraft.velocity
+            );
             
-            // Convert to real-world space for physics calculations
-            const spacecraftRealPos = scaleManager.vectorToRealWorld(spacecraftVisualPos);
-            const planetRealPos = scaleManager.vectorToRealWorld(planetVisualPos);
-            
-            // Calculate distance to planet center
-            const distanceVector = spacecraftVisualPos.clone().sub(planetVisualPos);
-            const distance = distanceVector.length();
-            
-            // Check for collision with planet and prevent it
-            if (distance < this.planet.radius) {
-                console.warn(`Spacecraft collision with planet detected! Distance: ${distance.toFixed(2)}, Planet radius: ${this.planet.radius.toFixed(2)}`);
-                
-                // Move spacecraft to surface of planet
-                const newPosition = distanceVector.normalize().multiplyScalar(this.planet.radius * 1.01).add(planetVisualPos);
-                this.spacecraft.setPosition(newPosition);
-                
-                // Reflect velocity to simulate bounce
-                const normal = distanceVector.normalize();
-                const reflectedVelocity = this.spacecraft.velocity.clone()
-                    .sub(normal.multiplyScalar(2 * this.spacecraft.velocity.dot(normal)))
-                    .multiplyScalar(0.8); // Dampen velocity
-                
-                this.spacecraft.setVelocity(reflectedVelocity);
-                
-                // Skip further physics for this frame
-                return;
+            if (collision) {
+                this.spacecraft.setPosition(collision.position);
+                this.spacecraft.setVelocity(collision.velocity);
+                return; // Skip further physics processing this frame
             }
             
             // Calculate gravitational force in real-world units
-            const realForce = this.planet.calculateGravitationalForce(
-                spacecraftRealPos,
-                this.spacecraft.mass
+            const realForce = physics.calculateGravitationalForce(
+                this.spacecraft.mass,
+                this.planet.mass,
+                scaleManager.vectorToRealWorld(this.spacecraft.position),
+                scaleManager.vectorToRealWorld(this.planet.mesh.position)
             );
             
             // Convert force back to visualization space
@@ -471,6 +460,9 @@ class Scene {
             
             // Apply acceleration to velocity (v = v0 + at)
             this.spacecraft.velocity.add(acceleration.multiplyScalar(deltaTime));
+            
+            // Update the orbital trajectory when orbit changes significantly
+            this.updateOrbitalTrajectory();
         }
         
         // Update spacecraft physics
@@ -574,9 +566,6 @@ class Scene {
             return null;
         }
         
-        // Get gravitational parameter (GM)
-        const mu = this.planet.G * this.planet.mass;
-        
         // Get real-world position and velocity of spacecraft relative to planet
         const scaledPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
         const realPosition = scaleManager.vectorToRealWorld(scaledPosition);
@@ -587,76 +576,9 @@ class Scene {
         console.log("  Scaled position:", scaledPosition.x.toFixed(2), scaledPosition.y.toFixed(2), scaledPosition.z.toFixed(2));
         console.log("  Real position:", realPosition.x.toFixed(2), realPosition.y.toFixed(2), realPosition.z.toFixed(2));
         console.log("  Real velocity:", realVelocity.x.toFixed(2), realVelocity.y.toFixed(2), realVelocity.z.toFixed(2));
-        console.log("  Gravitational parameter (mu):", mu);
         
-        // Calculate orbital elements
-        
-        // Step 1: Calculate the specific angular momentum vector (h = r × v)
-        const h = new THREE.Vector3().crossVectors(realPosition, realVelocity);
-        const hMagnitude = h.length();
-        
-        // Step 2: Calculate the eccentricity vector
-        // e = ((v × h) / μ) - (r / |r|)
-        const vCrossH = new THREE.Vector3().crossVectors(realVelocity, h);
-        const eccentricityVector = vCrossH.divideScalar(mu).sub(
-            realPosition.clone().normalize()
-        );
-        
-        const eccentricity = eccentricityVector.length();
-        
-        // Step 3: Calculate the semi-major axis
-        // a = h² / (μ * (1 - e²))
-        const r = realPosition.length();
-        const v = realVelocity.length();
-        
-        // Alternative calculation using orbit energy equation
-        // a = -μ / (2 * ε), where ε = v²/2 - μ/r
-        const energy = (v * v / 2) - (mu / r);
-        let semiMajorAxis;
-        
-        // For near-circular orbits, use standard equation
-        if (Math.abs(eccentricity) < 0.0001) {
-            semiMajorAxis = r;
-        } 
-        // For elliptical orbits, use energy equation
-        else if (energy < 0) {
-            semiMajorAxis = -mu / (2 * energy);
-        } 
-        // For parabolic/hyperbolic orbits (not typical for orbital spacecraft)
-        else {
-            semiMajorAxis = Math.abs(hMagnitude * hMagnitude / (mu * (1 - eccentricity * eccentricity)));
-        }
-        
-        // Step 4: Calculate periapsis and apoapsis
-        const periapsis = semiMajorAxis * (1 - eccentricity);
-        const apoapsis = eccentricity < 1 ? semiMajorAxis * (1 + eccentricity) : Infinity;
-        
-        // Step 5: Calculate orbital period (only meaningful for elliptical orbits)
-        let orbitalPeriod = 0;
-        if (eccentricity < 1) {
-            orbitalPeriod = 2 * Math.PI * Math.sqrt(Math.pow(semiMajorAxis, 3) / mu);
-        }
-        
-        console.log("DEBUG: calculateOrbitalParameters results:");
-        console.log("  h magnitude:", hMagnitude);
-        console.log("  Eccentricity:", eccentricity);
-        console.log("  Semi-major axis:", semiMajorAxis);
-        console.log("  Periapsis:", periapsis);
-        console.log("  Apoapsis:", apoapsis);
-        console.log("  Orbital period:", orbitalPeriod);
-        
-        // Return orbital parameters
-        return {
-            eccentricity: eccentricity,
-            semiMajorAxis: semiMajorAxis,
-            periapsis: periapsis, // perigee for Earth
-            apoapsis: apoapsis,   // apogee for Earth
-            orbitalPeriod: orbitalPeriod, // in seconds
-            // Additional parameters
-            specificAngularMomentum: hMagnitude,
-            position: r,
-            velocity: v
-        };
+        // Use physics module to calculate orbital parameters
+        return physics.calculateOrbitalParameters(realPosition, realVelocity, this.planet.mass);
     }
     
     /**
@@ -798,5 +720,148 @@ class Scene {
     stop() {
         this.isRunning = false;
         this.clock.stop();
+    }
+    
+    /**
+     * Creates the orbital trajectory visualization
+     */
+    createOrbitalTrajectory() {
+        // Remove any existing trajectory
+        if (this.orbitalTrajectory) {
+            this.scene.remove(this.orbitalTrajectory);
+            this.orbitalTrajectory = null;
+        }
+        
+        if (!this.spacecraft || !this.planet) {
+            return;
+        }
+        
+        // Calculate the orbital parameters
+        const orbit = this.calculateOrbitalParameters();
+        if (!orbit || orbit.eccentricity >= 1.0) {
+            console.log("Cannot create trajectory: orbit is not elliptical");
+            return;
+        }
+        
+        // Get the necessary orbital parameters
+        const { semiMajorAxis, eccentricity } = orbit;
+        
+        // Create points for the elliptical orbit
+        const points = this.calculateOrbitPoints(semiMajorAxis, eccentricity);
+        
+        // Create a line geometry
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        
+        // Create orbital path material - glowing blue line
+        const material = new THREE.LineBasicMaterial({ 
+            color: 0x00ffff,
+            opacity: 0.7,
+            transparent: true,
+            linewidth: 1
+        });
+        
+        // Create the line
+        this.orbitalTrajectory = new THREE.Line(geometry, material);
+        
+        // Add the trajectory to the scene
+        this.scene.add(this.orbitalTrajectory);
+        
+        console.log("Orbital trajectory visualization created");
+    }
+    
+    /**
+     * Calculates points along the elliptical orbit
+     * @param {number} semiMajorAxis - Semi-major axis of the orbit
+     * @param {number} eccentricity - Eccentricity of the orbit
+     * @returns {Array<THREE.Vector3>} Points defining the orbital path
+     */
+    calculateOrbitPoints(semiMajorAxis, eccentricity) {
+        // Get scale manager for calculations
+        const scaleManager = window.scaleManager;
+        if (!scaleManager) {
+            console.error("ScaleManager not found. Orbital calculations may be inaccurate.");
+            return [];
+        }
+        
+        // Calculate semi-minor axis: b = a * sqrt(1 - e²)
+        const semiMinorAxis = semiMajorAxis * Math.sqrt(1 - eccentricity * eccentricity);
+        
+        // Calculate focal distance: c = a * e
+        const focalDistance = semiMajorAxis * eccentricity;
+        
+        // Number of points to create a smooth ellipse
+        const numPoints = 200;
+        const points = [];
+        
+        // Get position and velocity for orbital orientation
+        const orbitParams = this.calculateOrbitalParameters();
+        if (!orbitParams) {
+            return [];
+        }
+        
+        // Calculate the position relative to planet
+        const relPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+        const relPositionReal = scaleManager.vectorToRealWorld(relPosition);
+        
+        // Calculate the velocity
+        const relVelocityReal = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
+        
+        // Calculate the specific angular momentum h = r × v
+        const h = new THREE.Vector3().crossVectors(relPositionReal, relVelocityReal);
+        const hNormalized = h.clone().normalize();
+        
+        // Calculate the vector from central body to periapsis
+        // e = ((v × h) / μ) - (r / |r|)
+        const mu = physics.G * this.planet.mass;
+        const vCrossH = new THREE.Vector3().crossVectors(relVelocityReal, h);
+        const eVector = vCrossH.divideScalar(mu).sub(relPositionReal.clone().normalize());
+        const eNormalized = eVector.clone().normalize();
+        
+        // The nodal vector (perpendicular to angular momentum)
+        const zAxis = new THREE.Vector3(0, 1, 0); // Reference direction
+        const nodeVector = new THREE.Vector3().crossVectors(zAxis, hNormalized).normalize();
+        
+        // Compute the perpendicular vector to complete the orbital plane basis
+        const pVector = new THREE.Vector3().crossVectors(hNormalized, eNormalized).normalize();
+        
+        // Generate points around the ellipse in the orbital plane
+        for (let i = 0; i <= numPoints; i++) {
+            const angle = (i / numPoints) * 2 * Math.PI;
+            
+            // Parametric equation of ellipse
+            const x = semiMajorAxis * Math.cos(angle) - focalDistance;
+            const y = semiMinorAxis * Math.sin(angle);
+            
+            // Create point in orbital plane
+            const point = new THREE.Vector3();
+            point.addScaledVector(eNormalized, x);
+            point.addScaledVector(pVector, y);
+            
+            // Scale to visualization space
+            const scaledPoint = scaleManager.vectorToVisualizationSpace(point);
+            
+            // Add the planet position as the center of the orbit
+            scaledPoint.add(this.planet.mesh.position);
+            
+            points.push(scaledPoint);
+        }
+        
+        return points;
+    }
+    
+    /**
+     * Updates the orbital trajectory visualization when orbit changes
+     */
+    updateOrbitalTrajectory() {
+        // Only update the trajectory periodically to avoid performance issues
+        if (!this._lastTrajectoryUpdate || 
+            (Date.now() - this._lastTrajectoryUpdate) > 1000) { // Update every 1 second
+            
+            // Recreate the trajectory
+            this.createOrbitalTrajectory();
+            
+            // Update the timestamp
+            this._lastTrajectoryUpdate = Date.now();
+        }
     }
 }
