@@ -20,9 +20,8 @@ canvas {
     padding: 15px;
     color: grey;
     border: 1px solid #5fff5f;
-    border-radius: 5px;
+    border-radius: 2px;
     z-index: 100;
-    max-width: 300px;
     text-transform: uppercase;
 }
 
@@ -32,18 +31,53 @@ canvas {
 }
 
 #info-panel {
-    top: 20px;
-    left: 20px;
+    width: 250px;
+    bottom: 20px;
+    right: 20px;
 }
 
 h2, h3 {
-    margin-top: 0;
-    color: #5fff5f;
+    display: block;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    color: #ffffff;
+    text-align: center;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
 }
 
-h2{
-    text-align: center;
+/* Info panel data layout */
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
 }
+
+.var-name {
+    text-align: left;
+    flex: 1;
+}
+
+.data-container {
+    text-align: right;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
 .data-value {
     font-weight: bold;
+    color: #ff8800;
+}
+
+.data-unit {
+    font-size: 0.8em;
+    color: #c8c8c8;
+    margin-left: 4px;
+}
+
+.stretched-text {
+    text-align: justify;
+    letter-spacing: 0.3em;
+    width: 100%;
 }
