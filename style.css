@@ -21,6 +21,7 @@ canvas {
     border-radius: 5px;
     z-index: 100;
     max-width: 300px;
+    text-transform: uppercase;
 }
 
 #controls-panel {

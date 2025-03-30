@@ -18,6 +18,9 @@ class Scene {
         // Setup grid and helpers
         this.setupHelpers();
         
+        // Add background stars
+        this.addStars();
+        
         // Create a reference to the spacecraft
         this.spacecraft = null;
         
@@ -76,9 +79,16 @@ class Scene {
      * Setup the camera
      */
     setupCamera() {
-        const aspectRatio = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000000);
-        this.camera.position.set(0, 5, 10);
+        // Create a perspective camera
+        this.camera = new THREE.PerspectiveCamera(
+            75, // Field of view
+            window.innerWidth / window.innerHeight, // Aspect ratio
+            0.1, // Near clipping plane
+            1000000000000 // Far clipping plane
+        );
+
+        // Position the camera
+        this.camera.position.set(0, 10, 20);
         this.camera.lookAt(0, 0, 0);
     }
     
@@ -86,21 +96,13 @@ class Scene {
      * Setup the renderer
      */
     setupRenderer() {
+        // Create the renderer
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setClearColor(0x000000);
-        
-        // Enable logarithmic depth buffer for better depth precision
-        this.renderer.logarithmicDepthBuffer = true;
-        
+        this.renderer.setClearColor(0x000000); // Black background
+
+        // Append the renderer to the DOM
         document.body.appendChild(this.renderer.domElement);
-        
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            this.camera.aspect = window.innerWidth / window.innerHeight;
-            this.camera.updateProjectionMatrix();
-            this.renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     }
     
     /**
@@ -121,40 +123,13 @@ class Scene {
      * Setup grid and axes helpers
      */
     setupHelpers() {
-        // Add some stars in the background
-        this.addStars();
-        
-        // World origin axes helper
-        const worldAxisHelper = new THREE.AxesHelper(5); // 5 units long
-        this.scene.add(worldAxisHelper);
-        
-        // Add text labels for each world axis
-        const createLabel = (text, color, position) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 32;
-            const context = canvas.getContext('2d');
-            context.fillStyle = color;
-            context.font = '24px "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace';
-            context.fillText(text, 4, 24);
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({ map: texture });
-            const sprite = new THREE.Sprite(material);
-            sprite.position.copy(position);
-            sprite.scale.set(1, 0.5, 1);
-            return sprite;
-        };
-        
-        // Create labels for each axis at world origin
-        const worldXLabel = createLabel('X', '#ff0000', new THREE.Vector3(5.5, 0, 0));
-        const worldYLabel = createLabel('Y', '#00ff00', new THREE.Vector3(0, 5.5, 0));
-        const worldZLabel = createLabel('Z', '#0000ff', new THREE.Vector3(0, 0, 5.5));
-        
-        // Add the labels to the scene
-        this.scene.add(worldXLabel);
-        this.scene.add(worldYLabel);
-        this.scene.add(worldZLabel);
+        // Add a grid helper
+        const gridHelper = new THREE.GridHelper(10, 10);
+        this.scene.add(gridHelper);
+
+        // Add axis helpers
+        const axesHelper = new THREE.AxesHelper(5);
+        this.scene.add(axesHelper);
     }
     
     /**
