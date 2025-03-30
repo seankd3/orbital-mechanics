@@ -13,6 +13,10 @@
 ### Fixed
 - Resolved gimbal lock issues in spacecraft rotation
 - Addressed erratic rotation behavior
+- Fixed thrust scaling issue where spacecraft thrust wasn't being properly converted from real-world to visualization space
+
+### Changed
+- Increased spacecraft thrust from 50N to 500N for better maneuverability
 
 ## [1.4.0] - 2025-03-10
 

@@ -536,8 +536,11 @@ class Scene {
                         const forwardVector = new THREE.Vector3(0, 0, 1);
                         forwardVector.applyQuaternion(this.spacecraft.mesh.quaternion);
                         
+                        // Convert thrust from real-world units to visualization space
+                        const visualThrust = window.scaleManager.forceToVisualizationSpace(this.spacecraft.thrust);
+                        
                         // Calculate thrust acceleration in visualization space (F = ma, so a = F/m)
-                        const thrustAcceleration = forwardVector.multiplyScalar(this.spacecraft.thrust / this.spacecraft.mass);
+                        const thrustAcceleration = forwardVector.multiplyScalar(visualThrust / this.spacecraft.mass);
                         
                         // Apply thrust acceleration without scaling by time warp (we'll apply that in the position update)
                         this.spacecraft.velocity.add(thrustAcceleration.multiplyScalar(normalDeltaTime));
