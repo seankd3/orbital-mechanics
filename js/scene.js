@@ -40,6 +40,14 @@ class Scene {
         this.clock = new THREE.Clock();
         this.isRunning = true;
         
+        // Time warp settings
+        this.timeWarp = {
+            factor: 1,
+            available: [1, 2, 5, 10, 50, 100, 1000],
+            currentIndex: 0,
+            active: false
+        };
+        
         // Control state
         this.keys = {
             space: false, // Forward thrust
@@ -48,7 +56,9 @@ class Scene {
             d: false,     // Yaw right
             q: false,     // Roll left
             e: false,     // Roll right
-            s: false      // Pitch up
+            s: false,     // Pitch up
+            period: false, // Increase time warp
+            comma: false   // Decrease time warp
         };
         
         // Chase camera settings
@@ -240,7 +250,7 @@ class Scene {
         
         // Add key for resetting camera position
         document.addEventListener('keydown', (event) => {
-            if (event.code === 'KeyR') {
+            if (event.key === 'r') {
                 // Reset camera orbit position
                 this.cameraSettings.horizontalOrbit = 0;
                 this.cameraSettings.verticalOrbit = 0;
@@ -266,15 +276,39 @@ class Scene {
      * Handle key down events
      */
     handleKeyDown(event) {
-        const key = event.key.toLowerCase();
-        if (key in this.keys) {
-            this.keys[key] = true;
+        // Process control keys
+        switch(event.key) {
+            case ' ':
+                this.keys.space = true;
+                break;
+            case 'w':
+                this.keys.w = true;
+                break;
+            case 'a':
+                this.keys.a = true;
+                break;
+            case 's':
+                this.keys.s = true;
+                break;
+            case 'd':
+                this.keys.d = true;
+                break;
+            case 'q':
+                this.keys.q = true;
+                break;
+            case 'e':
+                this.keys.e = true;
+                break;
+            case '.':
+                this.increaseTimeWarp();
+                break;
+            case ',':
+                this.decreaseTimeWarp();
+                break;
         }
         
         // Handle space bar separately
-        if (event.code === 'Space') {
-            this.keys.space = true;
-            
+        if (event.key === ' ') {
             // Apply thrust if spacebar is pressed
             if (this.spacecraft) {
                 this.spacecraft.applyThrust(true);
@@ -287,15 +321,33 @@ class Scene {
      * Handle key up events
      */
     handleKeyUp(event) {
-        const key = event.key.toLowerCase();
-        if (key in this.keys) {
-            this.keys[key] = false;
+        // Process control keys
+        switch(event.key) {
+            case ' ':
+                this.keys.space = false;
+                break;
+            case 'w':
+                this.keys.w = false;
+                break;
+            case 'a':
+                this.keys.a = false;
+                break;
+            case 's':
+                this.keys.s = false;
+                break;
+            case 'd':
+                this.keys.d = false;
+                break;
+            case 'q':
+                this.keys.q = false;
+                break;
+            case 'e':
+                this.keys.e = false;
+                break;
         }
         
         // Handle space bar separately
-        if (event.code === 'Space') {
-            this.keys.space = false;
-            
+        if (event.key === ' ') {
             // Stop thrust if spacebar is released
             if (this.spacecraft) {
                 this.spacecraft.applyThrust(false);
@@ -358,9 +410,12 @@ class Scene {
      * @param {number} deltaTime Time delta since last frame (seconds)
      */
     updatePhysics(deltaTime) {
+        // Apply time warp to deltaTime
+        const warpedDeltaTime = deltaTime * this.timeWarp.factor;
+        
         // Update planet rotation if exists
         if (this.planet) {
-            this.planet.update(deltaTime);
+            this.planet.update(warpedDeltaTime);
         }
         
         // Skip if spacecraft doesn't exist
@@ -418,6 +473,53 @@ class Scene {
                 this.spacecraft.setVelocity(collision.velocity);
                 return; // Skip further physics processing this frame
             }
+
+            // When in time warp and not thrusting, use Keplerian propagation (on rails)
+            if (this.timeWarp.factor > 1 && !this.spacecraft.isThrusting) {
+                // Calculate orbital parameters if not already calculated
+                const orbitalParameters = this.calculateOrbitalParameters();
+                
+                // Only use Keplerian propagation for elliptical orbits
+                if (orbitalParameters && orbitalParameters.eccentricity < 1.0) {
+                    // Convert position/velocity to real-world for physics calculation
+                    const realPosition = scaleManager.vectorToRealWorld(
+                        this.spacecraft.position.clone().sub(this.planet.mesh.position)
+                    );
+                    const realVelocity = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
+                    
+                    // Propagate using Kepler's equations
+                    const propagated = physics.propagateKeplerian(
+                        orbitalParameters, 
+                        this.planet.mass, 
+                        warpedDeltaTime
+                    );
+                    
+                    // If propagation succeeded, update position and velocity
+                    if (propagated) {
+                        // Convert back to visualization space
+                        const newPosition = scaleManager.vectorToVisualizationSpace(propagated.position);
+                        const newVelocity = scaleManager.vectorToVisualizationSpace(propagated.velocity);
+                        
+                        // Add planet position to get absolute position in scene
+                        newPosition.add(this.planet.mesh.position);
+                        
+                        // Update spacecraft state
+                        this.spacecraft.setPosition(newPosition);
+                        this.spacecraft.setVelocity(newVelocity);
+                        
+                        // Don't apply any other physics when using Keplerian propagation
+                        this.spacecraft.update(warpedDeltaTime, false); // false = don't update position/velocity again
+                        
+                        // Update the orbital trajectory
+                        this.updateOrbitalTrajectory();
+                        
+                        return; // Skip regular physics integration
+                    }
+                }
+            }
+            
+            // If not using Keplerian propagation (time warp off, thrusting, or non-elliptical orbit),
+            // fall back to normal numerical integration
             
             // Calculate gravitational force in real-world units
             const realForce = physics.calculateGravitationalForce(
@@ -434,14 +536,14 @@ class Scene {
             const acceleration = visualForce.divideScalar(this.spacecraft.mass);
             
             // Apply acceleration to velocity (v = v0 + at)
-            this.spacecraft.velocity.add(acceleration.multiplyScalar(deltaTime));
+            this.spacecraft.velocity.add(acceleration.multiplyScalar(warpedDeltaTime));
             
             // Update the orbital trajectory when orbit changes significantly
             this.updateOrbitalTrajectory();
         }
         
         // Update spacecraft physics
-        this.spacecraft.update(deltaTime);
+        this.spacecraft.update(warpedDeltaTime, true); // true = update position/velocity
     }
     
     /**
@@ -459,20 +561,20 @@ class Scene {
         
         // Rotation controls using persistent physics
         
-        // Pitch: W/S (down/up) - REVERSED
+        // Pitch: W/S (up/down)
         if (this.keys.w) {
-            this.spacecraft.rotate('pitch', 1); // Nose up (reversed)
+            this.spacecraft.rotate('pitch', 1); // Nose down
         }
         if (this.keys.s) {
-            this.spacecraft.rotate('pitch', -1); // Nose down (reversed)
+            this.spacecraft.rotate('pitch', -1); // Nose up
         }
         
-        // Yaw: A/D (left/right) - REVERSED
+        // Yaw: A/D (left/right)
         if (this.keys.a) {
-            this.spacecraft.rotate('yaw', 1); // Nose right (reversed)
+            this.spacecraft.rotate('yaw', 1); // Nose left
         }
         if (this.keys.d) {
-            this.spacecraft.rotate('yaw', -1); // Nose left (reversed)
+            this.spacecraft.rotate('yaw', -1); // Nose right
         }
         
         // Roll: Q/E (left/right)
@@ -678,6 +780,22 @@ class Scene {
         } else {
             console.log("DEBUG: No orbital parameters available");
         }
+        
+        // Update time warp display
+        const timeWarpDisplay = document.getElementById('time-warp');
+        if (timeWarpDisplay) {
+            timeWarpDisplay.textContent = this.timeWarp.factor + 'x';
+            
+            // Update visual indicator - show "WARP" label when time warp is > 1
+            const timeWarpIndicator = document.getElementById('time-warp-indicator');
+            if (timeWarpIndicator) {
+                if (this.timeWarp.factor > 1) {
+                    timeWarpIndicator.style.display = 'block';
+                } else {
+                    timeWarpIndicator.style.display = 'none';
+                }
+            }
+        }
     }
     
     /**
@@ -837,6 +955,30 @@ class Scene {
             
             // Update the timestamp
             this._lastTrajectoryUpdate = Date.now();
+        }
+    }
+    
+    /**
+     * Increase the time warp factor to the next level
+     */
+    increaseTimeWarp() {
+        if (this.timeWarp.currentIndex < this.timeWarp.available.length - 1) {
+            this.timeWarp.currentIndex++;
+            this.timeWarp.factor = this.timeWarp.available[this.timeWarp.currentIndex];
+            this.timeWarp.active = this.timeWarp.factor > 1;
+            console.log(`Time warp set to ${this.timeWarp.factor}x`);
+        }
+    }
+    
+    /**
+     * Decrease the time warp factor to the previous level
+     */
+    decreaseTimeWarp() {
+        if (this.timeWarp.currentIndex > 0) {
+            this.timeWarp.currentIndex--;
+            this.timeWarp.factor = this.timeWarp.available[this.timeWarp.currentIndex];
+            this.timeWarp.active = this.timeWarp.factor > 1;
+            console.log(`Time warp set to ${this.timeWarp.factor}x`);
         }
     }
 }
