@@ -13,7 +13,8 @@
             Velocity: <span id="velocity" class="data-value">0.0</span> m/s<br>
             Orientation: <span id="orientation" class="data-value">0.0, 0.0, 0.0</span><br>
             Thrust: <span id="thrust-status" class="data-value">OFF</span><br>
-            Altitude: <span id="altitude" class="data-value">0.0</span> km
+            Altitude: <span id="altitude" class="data-value">0.0</span> km<br>
+            Time Warp: <span id="time-warp" class="data-value">1x</span>
         </div>
         
         <h3>Orbital Parameters</h3>
@@ -35,8 +36,15 @@
             Q/E: Roll (left/right)<br>
             Mouse Drag: Orbit Camera<br>
             Mouse Wheel: Zoom In/Out<br>
-            R: Reset Camera Position
+            R: Reset Camera Position<br>
+            .: Increase Time Warp<br>
+            ,: Decrease Time Warp
         </p>
+    </div>
+    
+    <!-- Time Warp Indicator -->
+    <div id="time-warp-indicator" style="display: none; position: fixed; top: 20px; right: 20px; background-color: rgba(255, 50, 50, 0.7); color: white; font-weight: bold; padding: 10px; border-radius: 5px;">
+        WARP
     </div>
     
     <!-- Import Three.js -->

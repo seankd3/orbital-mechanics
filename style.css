@@ -4,7 +4,8 @@ body {
     overflow: hidden;
     background-color: #000;
     color: #5fff5f;
-    font-family: 'Courier New', monospace;
+    font-family: 'IBMPlexMono', monospace;
+    text-transform: uppercase;
 }
 
 canvas {
