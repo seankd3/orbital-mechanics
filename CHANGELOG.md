@@ -1,5 +1,24 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [1.6.0] - 2025-03-30
+
+### Added
+- Added SAS (Stability Augmentation System) feature
+  - Toggle with 'T' key to enable/disable
+  - Provides stronger rotation damping when active for precise control
+  - Status indicator shows SAS state in the spacecraft panel
+
+### Changed
+- Improved spacecraft rotation controls to use angular velocity instead of direct rotation
+  - Spacecraft now has momentum when rotating, creating more realistic physics
+  - Rotation builds up and continues after controls are released
+  - SAS can be used to quickly stabilize rotation
+- Greatly increased star field distances for more realistic space environment
+  - Stars are now positioned much further away (up to 5,000,000 units)
+  - Added more stars in the distance layer (20,000 stars)
+  - Improved star sizing and distribution
+  - Increased camera far clipping plane to accommodate distant stars
+
 ## [1.5.0] - 2025-03-30
 
 ### Changed

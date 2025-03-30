@@ -58,7 +58,8 @@ class Scene {
             e: false,     // Roll right
             s: false,     // Pitch up
             period: false, // Increase time warp
-            comma: false   // Decrease time warp
+            comma: false,  // Decrease time warp
+            t: false      // Toggle SAS
         };
         
         // Chase camera settings
@@ -94,7 +95,7 @@ class Scene {
             75, // Field of view
             window.innerWidth / window.innerHeight, // Aspect ratio
             0.1, // Near clipping plane
-            1000000000000 // Far clipping plane
+            10000000000000 // Far clipping plane - increased to see very distant stars
         );
 
         // Position the camera
@@ -147,10 +148,11 @@ class Scene {
      */
     addStars() {
         // Create multiple star layers for parallax effect and better depth
-        this.createStarLayer(10000, 0.008, 50000, 0xffffff);  // Distant small stars
-        this.createStarLayer(3000, 0.015, 20000, 0xf8f8ff);   // Medium distance stars
-        this.createStarLayer(1000, 0.025, 10000, 0xffffff);   // Closer, brighter stars
-        this.createStarLayer(100, 0.04, 5000, 0xf0f0ff);      // Few very bright stars
+        // Vastly increased distances to make stars appear much further away
+        this.createStarLayer(20000, 0.015, 5000000, 0xffffff);  // Extremely distant stars
+        this.createStarLayer(5000, 0.025, 2000000, 0xf8f8ff);   // Very distant stars
+        this.createStarLayer(1000, 0.04, 1000000, 0xffffff);    // Distant stars
+        this.createStarLayer(100, 0.05, 500000, 0xf0f0ff);      // Bright stars
     }
     
     /**
@@ -305,6 +307,19 @@ class Scene {
             case ',':
                 this.decreaseTimeWarp();
                 break;
+            case 't':
+                this.keys.t = true;
+                
+                // Toggle SAS on key press
+                if (this.spacecraft) {
+                    const sasActive = this.spacecraft.toggleSAS();
+                    // Update status display
+                    const sasStatus = document.getElementById('sas-status');
+                    if (sasStatus) {
+                        sasStatus.textContent = sasActive ? 'ON' : 'OFF';
+                    }
+                }
+                break;
         }
         
         // Handle space bar separately
@@ -343,6 +358,9 @@ class Scene {
                 break;
             case 'e':
                 this.keys.e = false;
+                break;
+            case 't':
+                this.keys.t = false;
                 break;
         }
         
@@ -855,6 +873,14 @@ class Scene {
                 }
             }
         }
+        
+        // Update SAS status display
+        if (this.spacecraft) {
+            const sasStatus = document.getElementById('sas-status');
+            if (sasStatus) {
+                sasStatus.textContent = this.spacecraft.getSASState() ? 'ON' : 'OFF';
+            }
+        }
     }
     
     /**
@@ -955,8 +981,15 @@ class Scene {
         const relPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
         const relPositionReal = scaleManager.vectorToRealWorld(relPosition);
         
-        // Calculate the velocity
         const relVelocityReal = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
+        
+        console.log("DEBUG: calculateOrbitPoints inputs:");
+        console.log("  Scaled position:", relPosition.x.toFixed(2), relPosition.y.toFixed(2), relPosition.z.toFixed(2));
+        console.log("  Real position:", relPositionReal.x.toFixed(2), relPositionReal.y.toFixed(2), relPositionReal.z.toFixed(2));
+        console.log("  Real velocity:", relVelocityReal.x.toFixed(2), relVelocityReal.y.toFixed(2), relVelocityReal.z.toFixed(2));
+        
+        // Use physics module to calculate orbital parameters
+        const orbitalParameters = physics.calculateOrbitalParameters(relPositionReal, relVelocityReal, this.planet.mass);
         
         // Calculate the specific angular momentum h = r × v
         const h = new THREE.Vector3().crossVectors(relPositionReal, relVelocityReal);
