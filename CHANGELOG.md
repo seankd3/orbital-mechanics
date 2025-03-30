@@ -1,5 +1,19 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [1.5.0] - 2025-03-30
+
+### Changed
+- Simplified spacecraft rotation system using Three.js built-in Object3D.rotate methods
+- Implemented local space rotations for more intuitive controls:
+  - Pitch: rotateX() - rotation around local X axis
+  - Yaw: rotateY() - rotation around local Y axis
+  - Roll: rotateZ() - rotation around local Z axis
+- Removed complex quaternion math implementation
+
+### Fixed
+- Resolved gimbal lock issues in spacecraft rotation
+- Addressed erratic rotation behavior
+
 ## [1.4.0] - 2025-03-10
 
 ### Added
