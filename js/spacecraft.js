@@ -15,8 +15,20 @@ class Spacecraft {
         
         // Rotation control properties
         this.rotationControl = {
-            rotationSpeed: 0.03 // Base rotation speed (radians)
+            rotationSpeed: 0.03, // Base rotation speed (radians)
+            angularDamping: 0.9995, // Normal angular velocity damping factor (0-1)
+            sasDamping: 0.95 // Strong damping when SAS is active
         };
+        
+        // Angular velocity (radians/second) around local axes
+        this.angularVelocity = {
+            x: 0, // Pitch
+            y: 0, // Yaw
+            z: 0  // Roll
+        };
+        
+        // SAS (Stability Augmentation System) state
+        this.sasActive = false;
         
         // Control state
         this.isThrusting = false;
@@ -180,29 +192,24 @@ class Spacecraft {
      * @param {number} direction - Direction of rotation (-1 or 1)
      */
     rotate(axis, direction) {
-        // Use spacecraft's defined rotation speed
-        const rotationSpeed = this.rotationControl.rotationSpeed * direction;
+        // Calculate angular acceleration to apply
+        const angularAcceleration = this.rotationControl.rotationSpeed * direction;
         
-        // We'll create a new rotation quaternion
-        let rotationQuat = new THREE.Quaternion();
-        
-        // Apply the rotation based on the input axis
-        // This uses the THREE.js Object3D local transformation system
-        // where rotations are applied relative to the object's local coordinate system
+        // Add to angular velocity instead of directly rotating
         switch(axis) {
             case 'pitch':
-                // For pitch, rotate around the LOCAL X axis (right vector)
-                this.mesh.rotateX(rotationSpeed);
+                // For pitch, add angular velocity around the LOCAL X axis
+                this.angularVelocity.x += angularAcceleration;
                 break;
                 
             case 'yaw':
-                // For yaw, rotate around the LOCAL Y axis (up vector)
-                this.mesh.rotateY(rotationSpeed);
+                // For yaw, add angular velocity around the LOCAL Y axis
+                this.angularVelocity.y += angularAcceleration;
                 break;
                 
             case 'roll':
-                // For roll, rotate around the LOCAL Z axis (forward vector)
-                this.mesh.rotateZ(rotationSpeed);
+                // For roll, add angular velocity around the LOCAL Z axis
+                this.angularVelocity.z += angularAcceleration;
                 break;
         }
     }
@@ -220,6 +227,21 @@ class Spacecraft {
         if (this.isThrusting) {
             this.applyThrust(true);
         }
+        
+        // Apply angular velocity to rotation
+        this.mesh.rotateX(this.angularVelocity.x * deltaTime);
+        this.mesh.rotateY(this.angularVelocity.y * deltaTime);
+        this.mesh.rotateZ(this.angularVelocity.z * deltaTime);
+        
+        // Apply angular damping (gradually reduces angular velocity)
+        // Use stronger damping if SAS is active
+        const dampingFactor = this.sasActive ? 
+            this.rotationControl.sasDamping : 
+            this.rotationControl.angularDamping;
+            
+        this.angularVelocity.x *= dampingFactor;
+        this.angularVelocity.y *= dampingFactor;
+        this.angularVelocity.z *= dampingFactor;
         
         // Only update position/velocity if requested (may be handled externally by Keplerian propagation)
         if (updatePosition) {
@@ -438,7 +460,6 @@ class Spacecraft {
             // Convert positions to real-world space
             const realPosition = scaleManager.vectorToRealSpace(this.position.clone());
             const realCentralBodyPosition = scaleManager.vectorToRealSpace(centralBodyPosition.clone());
-            const realVelocity = scaleManager.vectorToRealSpace(this.velocity.clone());
             const realRadius = scaleManager.distanceToRealSpace(centralBodyRadius);
             
             // Check for collision in real-world space
@@ -446,7 +467,7 @@ class Spacecraft {
                 realPosition,
                 realCentralBodyPosition,
                 realRadius,
-                realVelocity
+                this.velocity
             );
             
             // Convert result back to visualization space
@@ -563,5 +584,22 @@ class Spacecraft {
         if (!this.isThrusting) {
             this.calculateOrbitalParameters();
         }
+    }
+    
+    /**
+     * Toggle the Stability Augmentation System (SAS)
+     * @returns {boolean} The new SAS state
+     */
+    toggleSAS() {
+        this.sasActive = !this.sasActive;
+        return this.sasActive;
+    }
+    
+    /**
+     * Get the current SAS state
+     * @returns {boolean} Whether SAS is active
+     */
+    getSASState() {
+        return this.sasActive;
     }
 }
