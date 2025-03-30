@@ -5,6 +5,7 @@ body {
     background-color: #000;
     color: #5fff5f;
     font-family: 'IBMPlexMono', monospace;
+    font-weight: 200;
     text-transform: uppercase;
 }
 
@@ -12,12 +13,12 @@ canvas {
     display: block;
 }
 
-#info-panel {
+
+#controls-panel, #info-panel {
     position: absolute;
-    top: 20px;
-    left: 20px;
     background: rgba(0, 10, 0, 0.7);
     padding: 15px;
+    color: grey;
     border: 1px solid #5fff5f;
     border-radius: 5px;
     z-index: 100;
@@ -26,14 +27,13 @@ canvas {
 }
 
 #controls-panel {
-    position: absolute;
     bottom: 20px;
     left: 20px;
-    background: rgba(0, 10, 0, 0.7);
-    padding: 15px;
-    border: 1px solid #5fff5f;
-    border-radius: 5px;
-    z-index: 100;
+}
+
+#info-panel {
+    top: 20px;
+    left: 20px;
 }
 
 h2, h3 {
@@ -41,6 +41,9 @@ h2, h3 {
     color: #5fff5f;
 }
 
+h2{
+    text-align: center;
+}
 .data-value {
     font-weight: bold;
 }

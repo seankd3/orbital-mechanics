@@ -521,6 +521,62 @@ class Scene {
             // If not using Keplerian propagation (time warp off, thrusting, or non-elliptical orbit),
             // fall back to normal numerical integration
             
+            // When thrusting with time warp, we need to apply Newtonian physics correctly
+            if (this.spacecraft.isThrusting && this.timeWarp.factor > 1) {
+                // Apply thrust for each time step to ensure proper Newtonian physics
+                const normalDeltaTime = deltaTime; // Non-warped deltaTime
+                const numSteps = Math.min(10, Math.ceil(this.timeWarp.factor)); // Limit to 10 steps for performance
+                const stepDeltaTime = warpedDeltaTime / numSteps;
+                
+                // Break down the large time step into smaller steps for accuracy
+                for (let i = 0; i < numSteps; i++) {
+                    // Only apply thrust in the first step (or it would be multiplied incorrectly)
+                    if (i === 0 && this.spacecraft.isThrusting) {
+                        // Get the forward direction vector (local Z axis)
+                        const forwardVector = new THREE.Vector3(0, 0, 1);
+                        forwardVector.applyQuaternion(this.spacecraft.mesh.quaternion);
+                        
+                        // Calculate thrust acceleration in visualization space (F = ma, so a = F/m)
+                        const thrustAcceleration = forwardVector.multiplyScalar(this.spacecraft.thrust / this.spacecraft.mass);
+                        
+                        // Apply thrust acceleration without scaling by time warp (we'll apply that in the position update)
+                        this.spacecraft.velocity.add(thrustAcceleration.multiplyScalar(normalDeltaTime));
+                    }
+                    
+                    // Calculate gravitational force for this substep
+                    const realForce = physics.calculateGravitationalForce(
+                        this.spacecraft.mass,
+                        this.planet.mass,
+                        scaleManager.vectorToRealWorld(this.spacecraft.position),
+                        scaleManager.vectorToRealWorld(this.planet.mesh.position)
+                    );
+                    
+                    // Convert force back to visualization space
+                    const visualForce = scaleManager.vectorToVisualizationSpace(realForce);
+                    
+                    // Apply force to spacecraft (F=ma, so a=F/m)
+                    const acceleration = visualForce.divideScalar(this.spacecraft.mass);
+                    
+                    // Apply acceleration to velocity
+                    this.spacecraft.velocity.add(acceleration.multiplyScalar(stepDeltaTime));
+                    
+                    // Update position for this substep
+                    const deltaPosition = this.spacecraft.velocity.clone().multiplyScalar(stepDeltaTime);
+                    this.spacecraft.position.add(deltaPosition);
+                }
+                
+                // Update spacecraft mesh position
+                this.spacecraft.mesh.position.copy(this.spacecraft.position);
+                
+                // Update the orbital trajectory
+                this.updateOrbitalTrajectory();
+                
+                // Skip regular physics update since we've already done it
+                this.spacecraft.update(warpedDeltaTime, false); // false = don't update position/velocity again
+                return;
+            }
+            
+            // Standard non-time-warp physics or non-thrusting time warp that didn't use Keplerian
             // Calculate gravitational force in real-world units
             const realForce = physics.calculateGravitationalForce(
                 this.spacecraft.mass,
