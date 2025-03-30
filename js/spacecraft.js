@@ -9,7 +9,7 @@ class Spacecraft {
         // Initialize physics properties
         this.position = new THREE.Vector3(0, 0, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
-        this.thrust = 200000; // N (real-world value)
+        this.thrust = 50; // N (real-world value)
         this.mass = 20000; // kg
         this.direction = new THREE.Vector3(0, 0, 1); // Forward direction
         
@@ -488,22 +488,29 @@ class Spacecraft {
     }
     
     /**
-     * Apply thrust to the spacecraft
-     * @param {boolean} thrusting - Whether thrust is being applied
+     * Apply thrust in the current forward direction
+     * @param {boolean} isActive Whether thrust is active
      */
-    applyThrust(thrusting) {
-        const previousThrustState = this.isThrusting;
-        this.isThrusting = thrusting;
+    applyThrust(isActive) {
+        this.isThrusting = isActive;
         
-        // If we just started thrusting, switch to Newtonian physics
-        if (!previousThrustState && thrusting) {
-            this.useKeplerianModel = false;
-        }
-        
-        // If we just stopped thrusting, calculate orbital parameters for Keplerian model
-        if (previousThrustState && !thrusting) {
-            this.calculateOrbitalParameters();
-            this.useKeplerianModel = true;
+        if (isActive) {
+            // Get the forward direction vector (local Z axis)
+            const forwardVector = new THREE.Vector3(0, 0, 1);
+            forwardVector.applyQuaternion(this.mesh.quaternion);
+            
+            // Calculate thrust acceleration (F = ma, so a = F/m)
+            const thrustAcceleration = forwardVector.multiplyScalar(this.thrust / this.mass);
+            
+            // Apply to velocity
+            this.velocity.add(thrustAcceleration.multiplyScalar(1/60)); // Assuming ~60 FPS
+            
+            // Show thruster effect
+            this.thrusterMesh.visible = true;
+            this.thrusterMesh.scale.z = 0.8 + Math.random() * 0.4; // Animated thrust
+        } else {
+            // Hide thruster when not thrusting
+            this.thrusterMesh.visible = false;
         }
     }
     

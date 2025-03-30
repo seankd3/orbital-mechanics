@@ -11,19 +11,26 @@
         <h2>Spacecraft Status</h2>
         <div>
             Velocity: <span id="velocity" class="data-value">0.0</span> m/s<br>
-            Orientation: <span id="orientation" class="data-value">0.0, 0.0, 0.0</span><br>
             Thrust: <span id="thrust-status" class="data-value">OFF</span><br>
             Altitude: <span id="altitude" class="data-value">0.0</span> km<br>
             Time Warp: <span id="time-warp" class="data-value">1x</span>
         </div>
         
         <h3>Orbital Parameters</h3>
+        <style>
+            #info-panel .data-value {
+                color: #ff8800;
+                text-align: right;
+                display: inline-block;
+                width: 80px;
+            }
+        </style>
         <div>
-            Perigee: <span id="perigee" class="data-value">0.0</span> km<br>
-            Apogee: <span id="apogee" class="data-value">0.0</span> km<br>
-            Eccentricity: <span id="eccentricity" class="data-value">0.0</span><br>
-            Orbital Period: <span id="orbital-period" class="data-value">0.0</span> min<br>
-            Semi-major Axis: <span id="semi-major-axis" class="data-value">0.0</span> km
+            Perigee: <span class="data-value" id="perigee">0.0</span><span style="float:right;">km</span><br>
+            Apogee: <span class="data-value" id="apogee">0.0</span><span style="float:right;">km</span><br>
+            Eccentricity: <span class="data-value" id="eccentricity">0.0</span><br>
+            Orbital Period: <span class="data-value" id="orbital-period">0.0</span><span style="float:right;">min</span><br>
+            Semi-major Axis: <span class="data-value" id="semi-major-axis">0.0</span><span style="float:right;">km</span>
         </div>
     </div>
     
