@@ -37,7 +37,9 @@ class Planet {
             color: 0x000000,
             polygonOffset: true,
             polygonOffsetFactor: 1,
-            polygonOffsetUnits: 1
+            polygonOffsetUnits: 1,
+            emissive: 0x0000ff, // Add emissive property for glow effect
+            emissiveIntensity: 0.5 // Adjust intensity as needed
         });
         
         // Wireframe overlay (black lines)

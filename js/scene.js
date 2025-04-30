@@ -1,6 +1,10 @@
 /**
  * Scene class - handles the 3D scene setup, camera, and rendering
  */
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+
 class Scene {
     constructor() {
         // Create the scene
@@ -82,6 +86,9 @@ class Scene {
             lastX: 0,
             lastY: 0
         };
+        
+        // Setup post-processing
+        this.setupPostProcessing();
         
         console.log("Scene initialized");
     }
@@ -420,7 +427,7 @@ class Scene {
         this.updateDisplay();
         
         // Render the scene
-        this.renderer.render(this.scene, this.camera);
+        this.composer.render();
     }
     
     /**
@@ -1072,5 +1079,26 @@ class Scene {
             this.timeWarp.active = this.timeWarp.factor > 1;
             console.log(`Time warp set to ${this.timeWarp.factor}x`);
         }
+    }
+    
+    /**
+     * Setup post-processing
+     */
+    setupPostProcessing() {
+        // Create the composer for post-processing
+        this.composer = new EffectComposer(this.renderer);
+        
+        // Add the render pass
+        const renderPass = new RenderPass(this.scene, this.camera);
+        this.composer.addPass(renderPass);
+        
+        // Add the bloom pass
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.5, // Strength
+            0.4, // Radius
+            0.85 // Threshold
+        );
+        this.composer.addPass(bloomPass);
     }
 }

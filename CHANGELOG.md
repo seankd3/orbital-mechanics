@@ -138,3 +138,11 @@
 - Implemented proper orbital mechanics for spacecraft
 - Created orbital information display in UI
 - Added spacecraft controls and visuals
+
+## [1.7.0] - 2025-04-01
+
+### Added
+- Added screen space glow effect to mimic a CRT vector display
+  - Implemented using UnrealBloomPass from Three.js examples
+  - Updated createEdgedMesh in js/spacecraft.js and createPlanetMesh in js/planet.js to use THREE.MeshBasicMaterial with emissive properties
+  - Updated index.html to include the new UnrealBloomPass script from Three.js examples
