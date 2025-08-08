@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spacecraft Simulator</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Load Three.js core library first so that the examples can attach to the
+         global THREE namespace. Without loading three.min.js before the
+         example scripts the plugins will throw errors because THREE is not
+         defined yet. -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+
+    <!-- Additional shader and post‑processing dependencies required by
+         EffectComposer and UnrealBloomPass. These scripts extend the THREE
+         namespace with ShaderPass, CopyShader and LuminosityHighPassShader
+         implementations used internally by the bloom effect. Without them the
+         post‑processing pipeline will log errors and fail to render. -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/Pass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/LuminosityHighPassShader.js"></script>
+
+    <!-- Post‑processing plugins attach their constructors to the global THREE
+         object (e.g. THREE.EffectComposer). These scripts must be loaded
+         after three.min.js so that the constructors can augment the THREE
+         namespace correctly. -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/EffectComposer.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/RenderPass.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/UnrealBloomPass.js"></script>
@@ -111,8 +131,9 @@
         </div>
     </div>
     
-    <!-- Import Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <!-- Import OrbitControls after Three.js has been loaded in the head. We no longer
+         import three.min.js here because it is loaded earlier in the head to
+         ensure plugins find the THREE namespace. -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
     
     <!-- Create directories if they don't exist -->
@@ -127,5 +148,20 @@
     <script src="js/physics.js"></script>
     <script src="js/scene.js"></script>
     <script src="js/main.js"></script>
+
+    <!-- Debugging helper: display uncaught errors on the page so that runtime
+         exceptions are visible even without a developer console. This hook
+         appends the error message and location to the document body. -->
+    <script>
+        window.addEventListener('error', function (e) {
+            const pre = document.createElement('pre');
+            pre.style.color = 'red';
+            pre.style.background = 'rgba(255,255,255,0.1)';
+            pre.style.position = 'absolute';
+            pre.style.zIndex = '10000';
+            pre.textContent = 'Error: ' + e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '');
+            document.body.appendChild(pre);
+        });
+    </script>
 </body>
 </html>

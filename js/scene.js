@@ -1,9 +1,20 @@
 /**
  * Scene class - handles the 3D scene setup, camera, and rendering
  */
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+// The post-processing passes are provided via the legacy (non-module) scripts
+// loaded in index.html. Those scripts attach their constructors to the global
+// THREE namespace (e.g. THREE.EffectComposer). When this file was originally
+// written it attempted to import the classes using ES6 module syntax:
+//
+//   import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+//   import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+//   import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+//
+// However, index.html includes this script using a regular `<script>` tag (not
+// `type="module"`), so the browser will treat any `import` statements as a
+// syntax error and the scene will fail to initialize. To avoid this issue, we
+// rely on the global THREE namespace instead. The EffectComposer, RenderPass
+// and UnrealBloomPass constructors are now referenced via THREE.* below.
 
 class Scene {
     constructor() {
@@ -1085,19 +1096,26 @@ class Scene {
      * Setup post-processing
      */
     setupPostProcessing() {
-        // Create the composer for post-processing
-        this.composer = new EffectComposer(this.renderer);
-        
-        // Add the render pass
-        const renderPass = new RenderPass(this.scene, this.camera);
+        // Create the composer for post‑processing. The post‑processing scripts
+        // loaded in index.html attach their classes to the THREE namespace, so
+        // we reference them from there instead of importing above. Without
+        // doing this the application will throw a syntax error on startup.
+        this.composer = new THREE.EffectComposer(this.renderer);
+
+        // Add the render pass. RenderPass renders the entire scene through the
+        // camera before any additional effects are applied.
+        const renderPass = new THREE.RenderPass(this.scene, this.camera);
         this.composer.addPass(renderPass);
-        
-        // Add the bloom pass
-        const bloomPass = new UnrealBloomPass(
+
+        // Add a bloom pass. UnrealBloomPass adds a glow to bright areas of the
+        // scene. The parameters (strength, radius and threshold) can be tuned
+        // to achieve the desired effect. The pass must be created with a
+        // Vector2 representing the renderer size.
+        const bloomPass = new THREE.UnrealBloomPass(
             new THREE.Vector2(window.innerWidth, window.innerHeight),
-            1.5, // Strength
-            0.4, // Radius
-            0.85 // Threshold
+            1.5, // strength
+            0.4, // radius
+            0.85 // threshold
         );
         this.composer.addPass(bloomPass);
     }
