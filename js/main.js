@@ -9,7 +9,14 @@ let earth;
 let scaleManager;
 
 // Constants
-const SCALE_FACTOR = 0.001; // Scale everything down by 1000x for visualization
+// Scale everything down significantly for visualization. When using a factor
+// of 0.001 the Earth was still many thousands of units across (radius ≈ 6371)
+// which placed the camera inside the planet. Using a smaller scale brings
+// the planet into view. A factor of 1e‑6 converts metres to megametres
+// (1 unit = 1 km) and produces an Earth of radius ≈ 6.37. This allows the
+// default camera position (0,10,20) to be above the planet instead of inside
+// it, making the scene visible on load.
+const SCALE_FACTOR = 0.000001;
 const EARTH_RADIUS = 6371000; // meters (Earth radius, unscaled)
 const ORBIT_ALTITUDE = 400000; // meters (400 km altitude, unscaled)
 const ORBIT_DISTANCE = EARTH_RADIUS + ORBIT_ALTITUDE; // meters from center of Earth (unscaled)
