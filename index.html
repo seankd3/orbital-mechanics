@@ -7,110 +7,73 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="main-Panel">
-        <div id="info-panel">
-            <h2>Status</h2>
-            <div>
-                <div class="info-row">
-                    <div class="var-name">Velocity:</div>
-                    <div class="data-container">
-                        <span id="velocity" class="data-value">0.0</span>
-                        <span class="data-unit">m/s</span>
-                    </div>
-                </div>
+    <div id="bottom-bar">
+        <div id="time-warp-indicator">WARP</div>
 
-                <div class="info-row">
-                    <div class="var-name">Altitude:</div>
-                    <div class="data-container">
-                        <span id="altitude" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Orientation:</div>
-                    <div class="data-container">
-                        <span id="orientation" class="data-value">P: 0.0° Y: 0.0° R: 0.0°</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Time Warp:</div>
-                    <div class="data-container">
-                        <span id="time-warp" class="data-value">1x</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Thrust:</div>
-                    <div class="data-container">
-                        <span id="thrust-status" class="data-value">OFF</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">SAS:</div>
-                    <div class="data-container">
-                        <span id="sas-status" class="data-value">OFF</span>
-                    </div>
-                </div>
+        <div class="bar-column">
+            <div class="section-header">[ VEHICLE ]</div>
+            <div class="info-row">
+                <span class="var-name">VEL</span>
+                <span class="data-value" id="velocity">0.0</span>
+                <span class="data-unit">m/s</span>
             </div>
-
-            <h3>Orbital Parameters</h3>
-            <div>
-                <div class="info-row">
-                    <div class="var-name">Perigee:</div>
-                    <div class="data-container">
-                        <span id="perigee" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Apogee:</div>
-                    <div class="data-container">
-                        <span id="apogee" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Semi-major Axis:</div>
-                    <div class="data-container">
-                        <span id="semi-major-axis" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Orbital Period:</div>
-                    <div class="data-container">
-                        <span id="orbital-period" class="data-value">0.0</span>
-                        <span class="data-unit">min</span>
-                    </div>
-                </div>
-
-                <div class="info-row">
-                    <div class="var-name">Eccentricity:</div>
-                    <div class="data-container">
-                        <span id="eccentricity" class="data-value">0.0</span>
-                    </div>
-                </div>
+            <div class="info-row">
+                <span class="var-name">ALT</span>
+                <span class="data-value" id="altitude">0.0</span>
+                <span class="data-unit">km</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">THR</span>
+                <span class="data-value" id="thrust-status">OFF</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">SAS</span>
+                <span class="data-value" id="sas-status">OFF</span>
             </div>
         </div>
 
-        <div id="controls-panel">
-            <h3>Controls</h3>
-            <p>
-                SPACE: Forward Thrust<br>
-                W/S: Pitch (down/up)<br>
-                A/D: Yaw (left/right)<br>
-                Q/E: Roll (left/right)<br>
-                T: Toggle SAS<br>
-                Mouse Drag: Orbit Camera<br>
-                Mouse Wheel: Zoom In/Out<br>
-                R: Reset Camera Position<br>
-                .: Increase Time Warp<br>
-                ,: Decrease Time Warp
-            </p>
+        <div class="bar-divider">|</div>
+
+        <div class="bar-column">
+            <div class="section-header">[ ORBIT ]</div>
+            <div class="info-row">
+                <span class="var-name">PER</span>
+                <span class="data-value" id="perigee">0.0</span>
+                <span class="data-unit">km</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">APO</span>
+                <span class="data-value" id="apogee">0.0</span>
+                <span class="data-unit">km</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">SMA</span>
+                <span class="data-value" id="semi-major-axis">0.0</span>
+                <span class="data-unit">km</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">PRD</span>
+                <span class="data-value" id="orbital-period">0.0</span>
+                <span class="data-unit">min</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">ECC</span>
+                <span class="data-value" id="eccentricity">0.0</span>
+            </div>
         </div>
 
-        <!-- Time Warp Indicator -->
-        <div id="time-warp-indicator">
-            WARP
+        <div class="bar-divider">|</div>
+
+        <div class="bar-column">
+            <div class="section-header">[ ATTITUDE ]</div>
+            <div class="info-row">
+                <span class="var-name">ORI</span>
+                <span class="data-value" id="orientation">P: 0.0° Y: 0.0° R: 0.0°</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">WRP</span>
+                <span class="data-value" id="time-warp">1x</span>
+            </div>
         </div>
     </div>
 
