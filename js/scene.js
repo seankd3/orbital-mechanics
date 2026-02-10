@@ -168,39 +168,128 @@ class Scene {
     }
 
     /**
-     * Add background stars
+     * Add background stars from real star catalog (HYG Database)
      */
     addStars() {
-        this.createStarLayer(20000, 0.015, 5000000, 0xffffff);
-        this.createStarLayer(5000, 0.025, 2000000, 0xf8f8ff);
-        this.createStarLayer(1000, 0.04, 1000000, 0xffffff);
-        this.createStarLayer(100, 0.05, 500000, 0xf0f0ff);
+        const catalog = window.STAR_CATALOG;
+        if (!catalog || catalog.length === 0) {
+            console.warn('Star catalog not loaded, skipping stars');
+            return;
+        }
+
+        const R = 5000000;
+        const count = catalog.length;
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+        const sizes = new Float32Array(count);
+
+        for (let i = 0; i < count; i++) {
+            const ra = catalog[i][0];
+            const dec = catalog[i][1];
+            const mag = catalog[i][2];
+            const bv = catalog[i][3];
+
+            // RA/Dec to Cartesian on sphere
+            const raRad = ra * (Math.PI / 180);
+            const decRad = dec * (Math.PI / 180);
+            positions[i * 3]     = R * Math.cos(decRad) * Math.cos(raRad);
+            positions[i * 3 + 1] = R * Math.sin(decRad);
+            positions[i * 3 + 2] = -R * Math.cos(decRad) * Math.sin(raRad);
+
+            // B-V color index to RGB
+            const rgb = this.bvToRGB(bv);
+            colors[i * 3]     = rgb[0];
+            colors[i * 3 + 1] = rgb[1];
+            colors[i * 3 + 2] = rgb[2];
+
+            // Magnitude to point size (logarithmic — brighter = larger)
+            // Sirius (-1.44) -> ~8, mag 0 -> ~5, mag 3 -> ~2, mag 6.5 -> ~0.5
+            const brightness = Math.pow(10, -0.4 * (mag - 0));
+            sizes[i] = Math.max(0.4, Math.min(8.0, brightness * 5.0));
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: {},
+            vertexShader: `
+                attribute float size;
+                varying vec3 vColor;
+                void main() {
+                    vColor = color;
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_PointSize = size * (300.0 / -mvPosition.z);
+                    gl_PointSize = max(gl_PointSize, 0.5);
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vColor;
+                void main() {
+                    float dist = length(gl_PointCoord - vec2(0.5));
+                    if (dist > 0.5) discard;
+                    float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+                    gl_FragColor = vec4(vColor, alpha);
+                }
+            `,
+            vertexColors: true,
+            transparent: true,
+            depthWrite: false
+        });
+
+        const stars = new THREE.Points(geometry, material);
+        this.scene.add(stars);
     }
 
     /**
-     * Creates a layer of stars
+     * Convert B-V color index to RGB [0-1, 0-1, 0-1]
+     * Approximation of blackbody stellar colors
      */
-    createStarLayer(count, size, radius, color) {
-        const starsGeometry = new THREE.BufferGeometry();
-        const starsMaterial = new THREE.PointsMaterial({
-            color: color,
-            size: size,
-            sizeAttenuation: true
-        });
+    bvToRGB(bv) {
+        // Clamp B-V to valid range
+        bv = Math.max(-0.4, Math.min(2.0, bv));
 
-        const starsVertices = [];
-        for (let i = 0; i < count; i++) {
-            const phi = Math.acos(-1 + (2 * Math.random()));
-            const theta = 2 * Math.PI * Math.random();
-            const x = radius * Math.sin(phi) * Math.cos(theta);
-            const y = radius * Math.sin(phi) * Math.sin(theta);
-            const z = radius * Math.cos(phi);
-            starsVertices.push(x, y, z);
+        let r, g, b;
+
+        // Red channel
+        if (bv < 0.0) {
+            r = 0.61 + 0.11 * bv + 0.1 * bv * bv;
+        } else if (bv < 0.4) {
+            r = 0.83 + 0.17 * bv;
+        } else {
+            r = 1.0;
         }
 
-        starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-        const stars = new THREE.Points(starsGeometry, starsMaterial);
-        this.scene.add(stars);
+        // Green channel
+        if (bv < 0.0) {
+            g = 0.70 + 0.07 * bv + 0.1 * bv * bv;
+        } else if (bv < 0.4) {
+            g = 0.87 + 0.11 * bv;
+        } else if (bv < 1.6) {
+            g = 1.0 - 0.47 * (bv - 0.4);
+        } else {
+            g = 0.44;
+        }
+
+        // Blue channel
+        if (bv < 0.0) {
+            b = 1.0;
+        } else if (bv < 0.4) {
+            b = 1.0 - 0.8 * bv;
+        } else if (bv < 1.5) {
+            b = 0.68 - 0.45 * (bv - 0.4);
+        } else {
+            b = 0.19;
+        }
+
+        return [
+            Math.max(0, Math.min(1, r)),
+            Math.max(0, Math.min(1, g)),
+            Math.max(0, Math.min(1, b))
+        ];
     }
 
     /**
