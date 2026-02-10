@@ -9,7 +9,6 @@ class ScaleManager {
         // Cache frequently used values for efficiency
         this.invScaleFactor = 1 / scaleFactor;
         
-        console.log(`ScaleManager initialized with scale factor: ${scaleFactor}`);
     }
     
     /**
