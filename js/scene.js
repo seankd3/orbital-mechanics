@@ -93,12 +93,21 @@ class Scene {
     }
 
     /**
+     * Get viewport height minus the bottom bar
+     */
+    getViewportHeight() {
+        const bar = document.getElementById('bottom-bar');
+        return window.innerHeight - (bar ? bar.offsetHeight : 140);
+    }
+
+    /**
      * Setup the camera
      */
     setupCamera() {
+        const viewHeight = this.getViewportHeight();
         this.camera = new THREE.PerspectiveCamera(
             75,
-            window.innerWidth / window.innerHeight,
+            window.innerWidth / viewHeight,
             0.1,
             10000000 // Far enough for distant stars, reasonable with logarithmic depth
         );
@@ -111,14 +120,15 @@ class Scene {
      * Setup the renderer
      */
     setupRenderer() {
+        const viewHeight = this.getViewportHeight();
         this.renderer = new THREE.WebGLRenderer({
             antialias: true,
             logarithmicDepthBuffer: true
         });
         this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setSize(window.innerWidth, viewHeight);
         this.renderer.setClearColor(0x000000);
-        document.body.appendChild(this.renderer.domElement);
+        document.body.insertBefore(this.renderer.domElement, document.body.firstChild);
     }
 
     /**
@@ -126,10 +136,11 @@ class Scene {
      */
     setupResizeHandler() {
         window.addEventListener('resize', () => {
-            this.camera.aspect = window.innerWidth / window.innerHeight;
+            const viewHeight = this.getViewportHeight();
+            this.camera.aspect = window.innerWidth / viewHeight;
             this.camera.updateProjectionMatrix();
-            this.renderer.setSize(window.innerWidth, window.innerHeight);
-            this.composer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.setSize(window.innerWidth, viewHeight);
+            this.composer.setSize(window.innerWidth, viewHeight);
         });
     }
 
