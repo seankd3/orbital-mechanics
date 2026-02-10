@@ -85,9 +85,10 @@ h2 {
 }
 
 #time-warp-indicator {
+    display: none;
     position: fixed;
     top: 20px;
-    right: 270px; /* Positioned to avoid overlapping with the main panel */
+    right: 270px;
     background-color: rgba(255, 50, 50, 0.7);
     color: white;
     font-weight: bold;

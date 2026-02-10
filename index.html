@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spacecraft Simulator</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/EffectComposer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/RenderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/UnrealBloomPass.js"></script>
 </head>
 <body>
     <div id="main-Panel">
@@ -21,12 +18,18 @@
                         <span class="data-unit">m/s</span>
                     </div>
                 </div>
-                
+
                 <div class="info-row">
                     <div class="var-name">Altitude:</div>
                     <div class="data-container">
                         <span id="altitude" class="data-value">0.0</span>
                         <span class="data-unit">km</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="var-name">Orientation:</div>
+                    <div class="data-container">
+                        <span id="orientation" class="data-value">P: 0.0° Y: 0.0° R: 0.0°</span>
                     </div>
                 </div>
                 <div class="info-row">
@@ -48,7 +51,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <h3>Orbital Parameters</h3>
             <div>
                 <div class="info-row">
@@ -79,7 +82,7 @@
                         <span class="data-unit">min</span>
                     </div>
                 </div>
-                
+
                 <div class="info-row">
                     <div class="var-name">Eccentricity:</div>
                     <div class="data-container">
@@ -88,7 +91,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div id="controls-panel">
             <h3>Controls</h3>
             <p>
@@ -104,27 +107,30 @@
                 ,: Decrease Time Warp
             </p>
         </div>
-        
+
         <!-- Time Warp Indicator -->
-        <div id="time-warp-indicator" style="display: none; position: fixed; top: 20px; right: 20px; background-color: rgba(255, 50, 50, 0.7); color: white; font-weight: bold; padding: 10px; border-radius: 5px;">
+        <div id="time-warp-indicator">
             WARP
         </div>
     </div>
-    
-    <!-- Import Three.js -->
+
+    <!-- Import Three.js core -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    
-    <!-- Create directories if they don't exist -->
-    <script>
-        // We'll use these script files
-    </script>
-    
-    <!-- Import our scripts -->
+
+    <!-- Post-processing dependencies (must load after Three.js core) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/Pass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <!-- Import application scripts -->
     <script src="js/scaleManager.js"></script>
+    <script src="js/physics.js"></script>
     <script src="js/planet.js"></script>
     <script src="js/spacecraft.js"></script>
-    <script src="js/physics.js"></script>
     <script src="js/scene.js"></script>
     <script src="js/main.js"></script>
 </body>

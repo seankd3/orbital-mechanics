@@ -380,7 +380,6 @@ const physics = {
         
         // Check if spacecraft is inside planet
         if (distance < planetRadius) {
-            console.warn("Collision with planet detected!");
             
             // Calculate normal vector (direction from planet center to collision point)
             const normal = distanceVector.normalize();
