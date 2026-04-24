@@ -41,7 +41,7 @@ class Navball {
             'pointer-events:none;';
     }
 
-    update(spacecraft, planet) {
+    update(spacecraft, planet, maneuverVector) {
         if (!spacecraft || !planet) return;
 
         const radial = spacecraft.position.clone().sub(planet.mesh.position);
@@ -63,7 +63,13 @@ class Navball {
             { label: 'AN', vector: normal.clone().negate(), style: 'hollow' },
             { label: 'RAD', vector: radialOut, style: 'solid' },
             { label: 'IN', vector: radialOut.clone().negate(), style: 'hollow' }
-        ].map((marker) => {
+        ];
+
+        if (maneuverVector && maneuverVector.lengthSq() > 1e-10) {
+            this.markers.push({ label: 'MNV', vector: maneuverVector.clone().normalize(), style: 'cross' });
+        }
+
+        this.markers = this.markers.map((marker) => {
             marker.local = marker.vector.clone().applyQuaternion(inverseCraft).normalize();
             return marker;
         });
@@ -205,6 +211,13 @@ class Navball {
             ctx.beginPath();
             ctx.arc(x, y, 5, 0, Math.PI * 2);
             ctx.stroke();
+        } else if (marker.style === 'cross') {
+            ctx.beginPath();
+            ctx.moveTo(x - 7, y);
+            ctx.lineTo(x + 7, y);
+            ctx.moveTo(x, y - 7);
+            ctx.lineTo(x, y + 7);
+            ctx.stroke();
         } else {
             ctx.beginPath();
             ctx.moveTo(x, y - 7);
@@ -231,6 +244,7 @@ class Navball {
     }
 
     markerColor(label) {
+        if (label === 'MNV') return '#ffef8a';
         if (label === 'PRO') return '#ffffff';
         if (label === 'RET') return '#b8f6c4';
         return '#80c98f';
