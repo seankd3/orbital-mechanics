@@ -3,8 +3,13 @@
  */
 class Spacecraft {
     constructor() {
-        // Create the mesh
-        this.mesh = this.createSpacecraftMesh();
+        // Create a stable root mesh. Vehicle models are swapped inside it as
+        // mission phase changes, so scene/camera references stay valid.
+        this.mesh = new THREE.Group();
+        this.modelGroup = null;
+        this.vehicleMode = 'csm';
+        this.currentStageIndex = 0;
+        this.configureApolloVehicles();
 
         // Initialize physics properties
         this.position = new THREE.Vector3(0, 0, 0);
@@ -49,8 +54,210 @@ class Spacecraft {
 
         // Create and add thruster visual
         this.thrusterMesh = this.createThrusterMesh();
-        this.mesh.add(this.thrusterMesh);
         this.thrusterMesh.visible = false;
+        this.mesh.add(this.thrusterMesh);
+        this.setVehicleMode('csm');
+    }
+
+    configureApolloVehicles() {
+        this.csmSpec = {
+            mode: 'csm',
+            label: 'CSM',
+            thrust: 91189,
+            dryMass: 10198,
+            propellant: 18602,
+            maxPropellant: 18602,
+            isp: 314,
+            rcsPropellant: 374,
+            rcsMaxPropellant: 374
+        };
+
+        this.csmLmSpec = {
+            mode: 'csm-lm',
+            label: 'CSM+LM',
+            thrust: 91189,
+            dryMass: 25120,
+            propellant: 18602,
+            maxPropellant: 18602,
+            isp: 314,
+            rcsPropellant: 600,
+            rcsMaxPropellant: 600
+        };
+
+        this.lmDescentSpec = {
+            mode: 'lm-descent',
+            label: 'LM DPS',
+            thrust: 45040,
+            dryMass: 6770,
+            propellant: 8200,
+            maxPropellant: 8200,
+            isp: 311,
+            rcsPropellant: 287,
+            rcsMaxPropellant: 287
+        };
+
+        this.lmAscentSpec = {
+            mode: 'lm-ascent',
+            label: 'LM APS',
+            thrust: 15570,
+            dryMass: 2500,
+            propellant: 2350,
+            maxPropellant: 2350,
+            isp: 311,
+            rcsPropellant: 140,
+            rcsMaxPropellant: 140
+        };
+
+        this.payloadMass = 45200; // CSM + LM + SLA, approximate trans-lunar payload.
+        this.launchStages = [
+            {
+                label: 'S-IC',
+                thrust: 33850000,
+                dryMass: 131000,
+                propellant: 2140000,
+                maxPropellant: 2140000,
+                isp: 263
+            },
+            {
+                label: 'S-II',
+                thrust: 5141000,
+                dryMass: 40100,
+                propellant: 443000,
+                maxPropellant: 443000,
+                isp: 421
+            },
+            {
+                label: 'S-IVB',
+                thrust: 1033000,
+                dryMass: 13500,
+                propellant: 109000,
+                maxPropellant: 109000,
+                isp: 421
+            }
+        ];
+    }
+
+    setVehicleMode(mode) {
+        const oldQuaternion = this.mesh.quaternion.clone();
+        const oldPosition = this.mesh.position.clone();
+
+        if (this.modelGroup) {
+            this.mesh.remove(this.modelGroup);
+        }
+
+        this.vehicleMode = mode;
+        if (mode === 'saturn-v') {
+            this.currentStageIndex = Math.min(this.currentStageIndex, this.launchStages.length - 1);
+            this.modelGroup = this.createSaturnVMesh();
+        } else if (mode === 'csm-lm') {
+            this.applyVehicleSpec(this.csmLmSpec);
+            this.modelGroup = this.createCSMLMMesh();
+        } else if (mode === 'lm-descent') {
+            this.applyVehicleSpec(this.lmDescentSpec);
+            this.modelGroup = this.createLMMesh(true);
+        } else if (mode === 'lm-ascent') {
+            this.applyVehicleSpec(this.lmAscentSpec);
+            this.modelGroup = this.createLMMesh(false);
+        } else {
+            this.applyVehicleSpec(this.csmSpec);
+            this.modelGroup = this.createSpacecraftMesh();
+            this.vehicleMode = 'csm';
+        }
+
+        this.mesh.add(this.modelGroup);
+        if (this.thrusterMesh) {
+            this.mesh.remove(this.thrusterMesh);
+            this.mesh.add(this.thrusterMesh);
+            this.positionThrusterMesh();
+        }
+        this.mesh.position.copy(oldPosition);
+        this.mesh.quaternion.copy(oldQuaternion);
+        this.syncActiveStagePerformance();
+    }
+
+    applyVehicleSpec(spec) {
+        this.thrust = spec.thrust;
+        this.dryMass = spec.dryMass;
+        this.spsPropellant = spec.propellant;
+        this.spsMaxPropellant = spec.maxPropellant;
+        this.spsIsp = spec.isp;
+        this.rcsPropellant = spec.rcsPropellant;
+        this.rcsMaxPropellant = spec.rcsMaxPropellant;
+        this.spsFlowRate = spec.thrust / (spec.isp * 9.81);
+    }
+
+    syncActiveStagePerformance() {
+        if (this.vehicleMode !== 'saturn-v') return;
+        const stage = this.getActiveStage();
+        if (!stage) return;
+
+        this.thrust = stage.thrust;
+        this.spsPropellant = stage.propellant;
+        this.spsMaxPropellant = stage.maxPropellant;
+        this.spsIsp = stage.isp;
+        this.spsFlowRate = stage.thrust / (stage.isp * 9.81);
+        this.dryMass = this.payloadMass + this.getRemainingStageDryMass();
+        this.rcsPropellant = 0;
+        this.rcsMaxPropellant = 1;
+        this.positionThrusterMesh();
+    }
+
+    getActiveStage() {
+        if (this.vehicleMode !== 'saturn-v') return null;
+        return this.launchStages[this.currentStageIndex] || null;
+    }
+
+    getVehicleLabel() {
+        if (this.vehicleMode === 'saturn-v') {
+            const stage = this.getActiveStage();
+            return stage ? 'SATURN V ' + stage.label : 'SATURN V';
+        }
+        if (this.vehicleMode === 'csm-lm') return this.csmLmSpec.label;
+        if (this.vehicleMode === 'lm-descent') return this.lmDescentSpec.label;
+        if (this.vehicleMode === 'lm-ascent') return this.lmAscentSpec.label;
+        return this.csmSpec.label;
+    }
+
+    getRemainingStageDryMass() {
+        let dry = 0;
+        for (let i = this.currentStageIndex; i < this.launchStages.length; i++) {
+            dry += this.launchStages[i].dryMass;
+        }
+        return dry;
+    }
+
+    getRemainingStageMass() {
+        let mass = 0;
+        for (let i = this.currentStageIndex; i < this.launchStages.length; i++) {
+            mass += this.launchStages[i].dryMass + this.launchStages[i].propellant;
+        }
+        return mass;
+    }
+
+    separateStage() {
+        if (this.vehicleMode !== 'saturn-v') return false;
+        if (this.currentStageIndex < this.launchStages.length - 1) {
+            this.currentStageIndex++;
+            this.setVehicleMode('saturn-v');
+            return true;
+        }
+
+        this.setVehicleMode('csm-lm');
+        return true;
+    }
+
+    positionThrusterMesh() {
+        if (!this.thrusterMesh) return;
+        const z = this.vehicleMode === 'saturn-v' ? -12.8 :
+            this.vehicleMode === 'lm-descent' ? -1.55 :
+            this.vehicleMode === 'lm-ascent' ? -0.92 :
+            -3.25;
+        const radius = this.vehicleMode === 'saturn-v' ? 1.45 :
+            this.vehicleMode.startsWith('lm') ? 0.34 :
+            0.55;
+
+        this.thrusterMesh.position.z = z;
+        this.thrusterMesh.scale.set(radius / 0.55, radius / 0.55, this.vehicleMode === 'saturn-v' ? 2.5 : 1);
     }
 
     /**
@@ -146,6 +353,153 @@ class Spacecraft {
         this.direction = new THREE.Vector3(0, 0, 1);
 
         return spacecraftGroup;
+    }
+
+    createSaturnVMesh() {
+        const group = new THREE.Group();
+        const createMaterials = () => {
+            const solidMaterial = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                polygonOffset: true,
+                polygonOffsetFactor: 1,
+                polygonOffsetUnits: 1
+            });
+            const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+            return { solidMaterial, wireframeMaterial };
+        };
+        const createEdgedMesh = (geometry) => {
+            const { solidMaterial, wireframeMaterial } = createMaterials();
+            const mesh = new THREE.Mesh(geometry, solidMaterial);
+            const edges = new THREE.EdgesGeometry(geometry);
+            const wireframe = new THREE.LineSegments(edges, wireframeMaterial);
+            const part = new THREE.Group();
+            part.add(mesh);
+            part.add(wireframe);
+            return part;
+        };
+        const addCylinder = (radius, height, z, segments = 24) => {
+            const body = createEdgedMesh(new THREE.CylinderGeometry(radius, radius, height, segments));
+            body.rotation.x = Math.PI / 2;
+            body.position.z = z;
+            group.add(body);
+            return body;
+        };
+
+        // Vehicle points +Z upward/forward. Dimensions are stylized but keep
+        // Saturn V's proportions and staging landmarks readable.
+        if (this.currentStageIndex <= 0) addCylinder(1.25, 5.2, -7.2);
+        if (this.currentStageIndex <= 1) addCylinder(0.98, 4.0, -2.6);
+        if (this.currentStageIndex <= 2) addCylinder(0.72, 2.5, 0.65);
+
+        const instrumentUnit = addCylinder(0.74, 0.18, 1.98, 24);
+        instrumentUnit.scale.z = 1;
+
+        const lmAdapter = createEdgedMesh(new THREE.ConeGeometry(0.72, 1.1, 16));
+        lmAdapter.rotation.x = -Math.PI / 2;
+        lmAdapter.position.z = 2.6;
+        group.add(lmAdapter);
+
+        const csm = this.createSpacecraftMesh();
+        csm.scale.setScalar(0.55);
+        csm.position.z = 3.8;
+        group.add(csm);
+
+        const escapeTower = createEdgedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1.15, 8));
+        escapeTower.rotation.x = Math.PI / 2;
+        escapeTower.position.z = 5.12;
+        group.add(escapeTower);
+
+        const towerNozzle = createEdgedMesh(new THREE.ConeGeometry(0.18, 0.36, 8));
+        towerNozzle.rotation.x = Math.PI / 2;
+        towerNozzle.position.z = 5.86;
+        group.add(towerNozzle);
+
+        for (let i = 0; i < 4; i++) {
+            const angle = i * Math.PI / 2;
+            const fin = createEdgedMesh(new THREE.BoxGeometry(0.08, 0.55, 0.7));
+            fin.position.x = Math.cos(angle) * 1.3;
+            fin.position.y = Math.sin(angle) * 1.3;
+            fin.position.z = -10.0;
+            fin.rotation.z = angle;
+            group.add(fin);
+        }
+
+        return group;
+    }
+
+    createCSMLMMesh() {
+        const group = new THREE.Group();
+        const csm = this.createSpacecraftMesh();
+        csm.position.z = 1.1;
+        group.add(csm);
+
+        const lm = this.createLMMesh(true);
+        lm.scale.setScalar(0.86);
+        lm.rotation.y = Math.PI;
+        lm.position.z = -2.15;
+        group.add(lm);
+
+        return group;
+    }
+
+    createLMMesh(withDescentStage) {
+        const group = new THREE.Group();
+        const createMaterials = () => {
+            const solidMaterial = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                polygonOffset: true,
+                polygonOffsetFactor: 1,
+                polygonOffsetUnits: 1
+            });
+            const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+            return { solidMaterial, wireframeMaterial };
+        };
+        const createEdgedMesh = (geometry) => {
+            const { solidMaterial, wireframeMaterial } = createMaterials();
+            const mesh = new THREE.Mesh(geometry, solidMaterial);
+            const edges = new THREE.EdgesGeometry(geometry);
+            const wireframe = new THREE.LineSegments(edges, wireframeMaterial);
+            const part = new THREE.Group();
+            part.add(mesh);
+            part.add(wireframe);
+            return part;
+        };
+
+        const cabin = createEdgedMesh(new THREE.BoxGeometry(1.25, 1.05, 0.9));
+        cabin.position.z = 0.65;
+        cabin.rotation.z = Math.PI / 12;
+        group.add(cabin);
+
+        const tunnel = createEdgedMesh(new THREE.CylinderGeometry(0.28, 0.28, 0.45, 10));
+        tunnel.rotation.x = Math.PI / 2;
+        tunnel.position.z = 1.35;
+        group.add(tunnel);
+
+        if (withDescentStage) {
+            const descent = createEdgedMesh(new THREE.BoxGeometry(1.65, 1.65, 0.55));
+            descent.position.z = -0.25;
+            group.add(descent);
+
+            const engine = createEdgedMesh(new THREE.ConeGeometry(0.28, 0.5, 10));
+            engine.rotation.x = Math.PI / 2;
+            engine.position.z = -0.85;
+            group.add(engine);
+        }
+
+        const legMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+        const legPositions = [];
+        for (let i = 0; i < 4; i++) {
+            const angle = i * Math.PI / 2 + Math.PI / 4;
+            const foot = new THREE.Vector3(Math.cos(angle) * 1.45, Math.sin(angle) * 1.45, -1.25);
+            const root = new THREE.Vector3(Math.cos(angle) * 0.62, Math.sin(angle) * 0.62, -0.22);
+            legPositions.push(root.x, root.y, root.z, foot.x, foot.y, foot.z);
+            legPositions.push(foot.x - 0.24, foot.y, foot.z, foot.x + 0.24, foot.y, foot.z);
+        }
+        const legGeometry = new THREE.BufferGeometry();
+        legGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(legPositions), 3));
+        group.add(new THREE.LineSegments(legGeometry, legMaterial));
+
+        return group;
     }
 
     /**
@@ -304,6 +658,9 @@ class Spacecraft {
      * Get current total mass (dry + remaining propellant)
      */
     getCurrentMass() {
+        if (this.vehicleMode === 'saturn-v') {
+            return this.payloadMass + this.getRemainingStageMass();
+        }
         return this.dryMass + this.spsPropellant + this.rcsPropellant;
     }
 
@@ -311,6 +668,17 @@ class Spacecraft {
      * Get remaining SPS delta-v using Tsiolkovsky equation
      */
     getDeltaV() {
+        if (this.vehicleMode === 'saturn-v') {
+            let mass = this.getCurrentMass();
+            let deltaV = 0;
+            for (let i = this.currentStageIndex; i < this.launchStages.length; i++) {
+                const stage = this.launchStages[i];
+                const finalMass = Math.max(1, mass - stage.propellant);
+                deltaV += stage.isp * 9.81 * Math.log(mass / finalMass);
+                mass = finalMass - stage.dryMass;
+            }
+            return Math.max(0, deltaV);
+        }
         const currentMass = this.getCurrentMass();
         if (currentMass <= this.dryMass) return 0;
         return this.spsIsp * 9.81 * Math.log(currentMass / this.dryMass);
@@ -345,6 +713,28 @@ class Spacecraft {
      * @returns {number} actual burn time (may be less if fuel runs out)
      */
     burnSPS(deltaTime) {
+        if (this.vehicleMode === 'saturn-v') {
+            const stage = this.getActiveStage();
+            if (!stage || stage.propellant <= 0) {
+                this.isThrusting = false;
+                return 0;
+            }
+
+            const flowRate = stage.thrust / (stage.isp * 9.81);
+            const fuelNeeded = flowRate * deltaTime;
+            if (fuelNeeded > stage.propellant) {
+                const actualTime = stage.propellant / flowRate;
+                stage.propellant = 0;
+                this.spsPropellant = 0;
+                this.isThrusting = false;
+                return actualTime;
+            }
+
+            stage.propellant -= fuelNeeded;
+            this.spsPropellant = stage.propellant;
+            return deltaTime;
+        }
+
         const fuelNeeded = this.spsFlowRate * deltaTime;
         if (this.spsPropellant <= 0) {
             this.isThrusting = false;
