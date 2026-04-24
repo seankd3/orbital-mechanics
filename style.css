@@ -127,6 +127,60 @@ canvas#main-canvas {
     z-index: 200;
 }
 
+#dsky-panel {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    width: 210px;
+    border: 1px solid var(--mocr-line);
+    background: #000;
+    color: var(--mocr-text);
+    z-index: 60;
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 6px 8px;
+    box-sizing: border-box;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+.dsky-title {
+    color: var(--mocr-line);
+    border-bottom: 1px solid var(--mocr-dim);
+    margin-bottom: 4px;
+}
+
+.dsky-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.dsky-row span:first-child,
+.dsky-help {
+    color: var(--mocr-dim);
+}
+
+.dsky-help {
+    border-top: 1px solid var(--mocr-dim);
+    margin-top: 4px;
+    padding-top: 4px;
+    font-size: 9px;
+}
+
+.map-label {
+    position: fixed;
+    z-index: 55;
+    color: var(--mocr-text);
+    font-size: 10px;
+    line-height: 1;
+    text-transform: uppercase;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 920px), (max-aspect-ratio: 4 / 5) {
     #bottom-bar {
         height: 136px;
@@ -154,6 +208,11 @@ canvas#main-canvas {
     }
 
     .data-unit {
+        font-size: 9px;
+    }
+
+    #dsky-panel {
+        width: 180px;
         font-size: 9px;
     }
 }

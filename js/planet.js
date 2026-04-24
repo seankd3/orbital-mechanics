@@ -90,8 +90,8 @@ class Planet {
             opacity: 0.7
         });
 
-        const gridLines = new THREE.LineSegments(geometry, material);
-        this.mesh.add(gridLines);
+        this.gridLines = new THREE.LineSegments(geometry, material);
+        this.mesh.add(this.gridLines);
     }
 
     /**
@@ -140,8 +140,8 @@ class Planet {
                 opacity: 0.6
             });
 
-            const coastlineSegments = new THREE.LineSegments(geometry, material);
-            this.mesh.add(coastlineSegments);
+            this.coastlineSegments = new THREE.LineSegments(geometry, material);
+            this.mesh.add(this.coastlineSegments);
         } catch (err) {
             console.warn('Failed to load coastline data:', err);
         }

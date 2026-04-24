@@ -29,7 +29,21 @@ class Scene {
 
         // Create a reference to the orbital trajectory
         this.orbitalTrajectory = null;
+        this.predictedTrajectory = null;
         this.mapOverlay = null;
+
+        this.maneuver = {
+            active: false,
+            progradeDV: 0,
+            predictedOrbit: null
+        };
+
+        this.displayOptions = {
+            orbit: true,
+            earthGrid: true,
+            coastlines: true,
+            stars: true
+        };
 
         // Setup camera controls
         this.setupControls();
@@ -111,6 +125,8 @@ class Scene {
 
         // Setup resize handler
         this.setupResizeHandler();
+
+        this.setupMapLabels();
     }
 
     /**
@@ -201,6 +217,18 @@ class Scene {
         const sunLight = new THREE.DirectionalLight(0xffffff, 1);
         sunLight.position.set(10, 10, 10);
         this.scene.add(sunLight);
+    }
+
+    setupMapLabels() {
+        this.mapLabels = {};
+        const labels = ['ap', 'pe', 'ship', 'node'];
+        for (let i = 0; i < labels.length; i++) {
+            const element = document.createElement('div');
+            element.className = 'map-label';
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            this.mapLabels[labels[i]] = element;
+        }
     }
 
     /**
@@ -448,6 +476,36 @@ class Scene {
             case 'm':
                 this.cameraMode = this.cameraMode === 'map' ? 'craft' : 'map';
                 break;
+            case 'n':
+                this.toggleManeuverNode();
+                break;
+            case '[':
+                this.adjustManeuverDV(-5);
+                break;
+            case ']':
+                this.adjustManeuverDV(5);
+                break;
+            case '{':
+                this.adjustManeuverDV(-25);
+                break;
+            case '}':
+                this.adjustManeuverDV(25);
+                break;
+            case 'b':
+                this.executeManeuver();
+                break;
+            case '1':
+                this.toggleDisplayOption('orbit');
+                break;
+            case '2':
+                this.toggleDisplayOption('earthGrid');
+                break;
+            case '3':
+                this.toggleDisplayOption('coastlines');
+                break;
+            case '4':
+                this.toggleDisplayOption('stars');
+                break;
             // RCS translation keys
             case 'i':
                 this.keys.i = true;
@@ -587,7 +645,9 @@ class Scene {
 
         // Update the orbital trajectory
         this.updateOrbitalTrajectory();
+        this.updatePredictedTrajectory();
         this.updateMapOverlay();
+        this.updateMapLabels();
 
         // Update navball
         if (this.navball && this.spacecraft && this.planet) {
@@ -602,7 +662,7 @@ class Scene {
         // Render stars first in their own scene (no depth interaction with main scene)
         this.renderer.autoClear = true;
         const activeCamera = this.getActiveCamera();
-        if (this.starScene) {
+        if (this.starScene && this.displayOptions.stars) {
             this.renderer.render(this.starScene, activeCamera);
             // Clear only depth so main scene renders on top of star background
             this.renderer.autoClear = false;
@@ -996,6 +1056,16 @@ class Scene {
                 const semiMajorAxisKm = orbit.semiMajorAxis / 1000;
                 semiMajorAxis.textContent = semiMajorAxisKm.toFixed(2);
             }
+
+            const timeToAp = document.getElementById('time-to-ap');
+            if (timeToAp) {
+                timeToAp.textContent = this.formatOrbitTime(this.timeToTrueAnomaly(orbit, Math.PI));
+            }
+
+            const timeToPe = document.getElementById('time-to-pe');
+            if (timeToPe) {
+                timeToPe.textContent = this.formatOrbitTime(this.timeToTrueAnomaly(orbit, 0));
+            }
         }
 
         // Update time warp display
@@ -1039,7 +1109,42 @@ class Scene {
             if (rcsFuelDisplay) {
                 rcsFuelDisplay.textContent = this.spacecraft.getRCSFuelPercent().toFixed(1);
             }
+
+            const rateDisplay = document.getElementById('attitude-rate');
+            if (rateDisplay) {
+                rateDisplay.textContent = this.spacecraft.getAngularRateDeg().toFixed(1);
+            }
         }
+
+        const maneuverStatus = document.getElementById('maneuver-status');
+        if (maneuverStatus) {
+            maneuverStatus.textContent = this.maneuver.active ? 'ARMED' : 'NONE';
+        }
+        const maneuverDV = document.getElementById('maneuver-dv');
+        if (maneuverDV) {
+            maneuverDV.textContent = this.maneuver.progradeDV.toFixed(0);
+        }
+        const dskyMode = document.getElementById('dsky-mode');
+        if (dskyMode) dskyMode.textContent = this.cameraMode.toUpperCase();
+        const dskyNode = document.getElementById('dsky-node');
+        if (dskyNode) dskyNode.textContent = this.maneuver.active ? 'NODE SET' : 'NO NODE';
+        const dskyVector = document.getElementById('dsky-vector');
+        if (dskyVector) dskyVector.textContent = 'DV ' + (this.maneuver.progradeDV >= 0 ? '+' : '') + this.maneuver.progradeDV.toFixed(0);
+    }
+
+    timeToTrueAnomaly(orbit, targetTrueAnomaly) {
+        if (!orbit || orbit.eccentricity >= 1 || !isFinite(orbit.orbitalPeriod)) return Infinity;
+        const currentM = physics.trueToMeanAnomaly(orbit.trueAnomaly, orbit.eccentricity);
+        const targetM = physics.trueToMeanAnomaly(targetTrueAnomaly, orbit.eccentricity);
+        const meanMotion = (Math.PI * 2) / orbit.orbitalPeriod;
+        let deltaM = targetM - currentM;
+        while (deltaM < 0) deltaM += Math.PI * 2;
+        return deltaM / meanMotion;
+    }
+
+    formatOrbitTime(seconds) {
+        if (!isFinite(seconds)) return '--';
+        return (seconds / 60).toFixed(1);
     }
 
     /**
@@ -1154,20 +1259,14 @@ class Scene {
         const numPoints = 720;
         const points = [];
 
-        // Get real-world position and velocity for orbital orientation
-        const relPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
-        const relPositionReal = scaleManager.vectorToRealWorld(relPosition);
-        const relVelocityReal = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
-
-        // Calculate angular momentum vector
-        const h = new THREE.Vector3().crossVectors(relPositionReal, relVelocityReal);
-        const hNormalized = h.clone().normalize();
-
-        // Calculate the eccentricity vector (points toward periapsis)
-        const mu = physics.G * this.planet.mass;
-        const vCrossH = new THREE.Vector3().crossVectors(relVelocityReal, h);
-        const eVector = vCrossH.divideScalar(mu).sub(relPositionReal.clone().normalize());
-        const eNormalized = eVector.clone().normalize();
+        const hNormalized = orbitParams.h.clone().normalize();
+        let eNormalized = orbitParams.eVector.clone();
+        if (eNormalized.lengthSq() < 1e-12) {
+            const relPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+            eNormalized = scaleManager.vectorToRealWorld(relPosition).normalize();
+        } else {
+            eNormalized.normalize();
+        }
 
         // Perpendicular vector in the orbital plane
         const pVector = new THREE.Vector3().crossVectors(hNormalized, eNormalized).normalize();
@@ -1237,6 +1336,157 @@ class Scene {
         }
         attribute.needsUpdate = true;
         this.mapOverlay.geometry.computeBoundingSphere();
+    }
+
+    updateMapLabels() {
+        if (!this.mapLabels) return;
+        const visible = this.cameraMode === 'map' && this.planet && this.spacecraft && this._cachedOrbitalParams;
+        for (const key in this.mapLabels) {
+            this.mapLabels[key].style.display = visible ? 'block' : 'none';
+        }
+        if (!visible) return;
+
+        const orbit = this._cachedOrbitalParams;
+        const periDir = orbit.eVector.lengthSq() > 1e-12 ?
+            orbit.eVector.clone().normalize() :
+            this.spacecraft.position.clone().sub(this.planet.mesh.position).normalize();
+        const apoDir = periDir.clone().negate();
+        const pe = this.planet.mesh.position.clone().addScaledVector(
+            window.scaleManager.vectorToVisualizationSpace(periDir),
+            orbit.periapsis
+        );
+        const ap = this.planet.mesh.position.clone().addScaledVector(
+            window.scaleManager.vectorToVisualizationSpace(apoDir),
+            orbit.apoapsis
+        );
+
+        this.placeScreenLabel(this.mapLabels.pe, pe, 'PE');
+        this.placeScreenLabel(this.mapLabels.ap, ap, 'AP');
+        this.placeScreenLabel(this.mapLabels.ship, this.spacecraft.position, 'CSM');
+        this.placeScreenLabel(
+            this.mapLabels.node,
+            this.spacecraft.position.clone().add(this.spacecraft.velocity.clone().normalize().multiplyScalar(320)),
+            this.maneuver.active ? 'NODE ' + signedNumber(this.maneuver.progradeDV, 0) : ''
+        );
+
+        function signedNumber(value, decimals) {
+            const fixed = Math.abs(value).toFixed(decimals);
+            return (value >= 0 ? '+' : '-') + fixed;
+        }
+    }
+
+    placeScreenLabel(element, worldPosition, text) {
+        if (!text) {
+            element.style.display = 'none';
+            return;
+        }
+        const viewHeight = this.getViewportHeight();
+        const projected = worldPosition.clone().project(this.getActiveCamera());
+        const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-projected.y * 0.5 + 0.5) * viewHeight;
+        element.textContent = text;
+        element.style.left = x + 'px';
+        element.style.top = y + 'px';
+    }
+
+    toggleDisplayOption(name) {
+        if (!(name in this.displayOptions)) return;
+        this.displayOptions[name] = !this.displayOptions[name];
+
+        if (name === 'earthGrid' && this.planet && this.planet.gridLines) {
+            this.planet.gridLines.visible = this.displayOptions[name];
+        }
+        if (name === 'coastlines' && this.planet && this.planet.coastlineSegments) {
+            this.planet.coastlineSegments.visible = this.displayOptions[name];
+        }
+        if (name === 'orbit') {
+            this.createOrbitalTrajectory();
+            this.updatePredictedTrajectory(true);
+        }
+    }
+
+    toggleManeuverNode() {
+        this.maneuver.active = !this.maneuver.active;
+        if (this.maneuver.active && this.maneuver.progradeDV === 0) {
+            this.maneuver.progradeDV = 10;
+        }
+        if (!this.maneuver.active) {
+            this.maneuver.progradeDV = 0;
+        }
+        this.updatePredictedTrajectory(true);
+    }
+
+    adjustManeuverDV(delta) {
+        if (!this.maneuver.active) {
+            this.maneuver.active = true;
+        }
+        this.maneuver.progradeDV = THREE.MathUtils.clamp(this.maneuver.progradeDV + delta, -1500, 1500);
+        this.updatePredictedTrajectory(true);
+    }
+
+    executeManeuver() {
+        if (!this.maneuver.active || !this.spacecraft) return;
+        const requestedDV = this.maneuver.progradeDV;
+        const availableDV = this.spacecraft.consumeDeltaV(requestedDV);
+        const appliedDV = Math.sign(requestedDV) * availableDV;
+        const scaleManager = window.scaleManager;
+        const direction = this.spacecraft.velocity.clone().normalize();
+        this.spacecraft.velocity.add(direction.multiplyScalar(scaleManager.velocityToVisualizationSpace(appliedDV)));
+        this.maneuver.active = false;
+        this.maneuver.progradeDV = 0;
+        this.updatePredictedTrajectory(true);
+        this.createOrbitalTrajectory();
+    }
+
+    updatePredictedTrajectory(force = false) {
+        if (!force && this._lastPredictedTrajectoryUpdate &&
+            (Date.now() - this._lastPredictedTrajectoryUpdate) < 500) {
+            return;
+        }
+        this._lastPredictedTrajectoryUpdate = Date.now();
+
+        if (this.predictedTrajectory) {
+            this.scene.remove(this.predictedTrajectory);
+            this.predictedTrajectory.geometry.dispose();
+            this.predictedTrajectory.material.dispose();
+            this.predictedTrajectory = null;
+        }
+        this.maneuver.predictedOrbit = null;
+
+        if (!this.maneuver.active || !this.spacecraft || !this.planet || !this.displayOptions.orbit) return;
+
+        const scaleManager = window.scaleManager;
+        if (!scaleManager) return;
+
+        const realPosition = scaleManager.vectorToRealWorld(this.spacecraft.position.clone().sub(this.planet.mesh.position));
+        const realVelocity = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
+        const prograde = realVelocity.clone().normalize();
+        const plannedVelocity = realVelocity.clone().addScaledVector(prograde, this.maneuver.progradeDV);
+        const predicted = physics.calculateOrbitalParameters(realPosition, plannedVelocity, this.planet.mass);
+        if (!predicted || predicted.eccentricity >= 1 || predicted.semiMajorAxis <= 0) return;
+
+        this.maneuver.predictedOrbit = predicted;
+        const points = this.calculateOrbitPoints(predicted.semiMajorAxis, predicted.eccentricity, predicted);
+        const segmentPoints = this.cameraMode === 'map' ? this.buildVisibleOrbitSegments(points) : pointsToSegments(points);
+        if (segmentPoints.length === 0) return;
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(segmentPoints);
+        const material = new THREE.LineBasicMaterial({
+            color: 0xffef8a,
+            transparent: true,
+            opacity: 0.95,
+            linewidth: 1
+        });
+        this.predictedTrajectory = new THREE.LineSegments(geometry, material);
+        this.scene.add(this.predictedTrajectory);
+
+        function pointsToSegments(sourcePoints) {
+            const result = [];
+            for (let i = 0; i < sourcePoints.length - 1; i++) {
+                result.push(sourcePoints[i], sourcePoints[i + 1]);
+            }
+            return result;
+        }
     }
 
     /**

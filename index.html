@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spacecraft Simulator</title>
-    <link rel="stylesheet" href="style.css?v=mocr5">
+    <link rel="stylesheet" href="style.css?v=mocr6">
 </head>
 <body>
     <div id="bottom-bar">
@@ -45,6 +45,11 @@
                 <span class="data-value" id="rcs-fuel">100.0</span>
                 <span class="data-unit">%</span>
             </div>
+            <div class="info-row">
+                <span class="var-name">RTE</span>
+                <span class="data-value" id="attitude-rate">0.0</span>
+                <span class="data-unit">deg/s</span>
+            </div>
         </div>
 
         <div class="bar-divider">|</div>
@@ -75,6 +80,16 @@
                 <span class="var-name">ECC</span>
                 <span class="data-value" id="eccentricity">0.0</span>
             </div>
+            <div class="info-row">
+                <span class="var-name">TAP</span>
+                <span class="data-value" id="time-to-ap">--</span>
+                <span class="data-unit">min</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">TPE</span>
+                <span class="data-value" id="time-to-pe">--</span>
+                <span class="data-unit">min</span>
+            </div>
         </div>
 
         <div class="bar-divider">|</div>
@@ -93,21 +108,38 @@
                 <span class="var-name">CAM</span>
                 <span class="data-value" id="camera-mode">CRAFT</span>
             </div>
+            <div class="info-row">
+                <span class="var-name">MNV</span>
+                <span class="data-value" id="maneuver-status">NONE</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">MDV</span>
+                <span class="data-value" id="maneuver-dv">0</span>
+                <span class="data-unit">m/s</span>
+            </div>
         </div>
+    </div>
+
+    <div id="dsky-panel">
+        <div class="dsky-title">DSKY CMD</div>
+        <div class="dsky-row"><span>V16</span><span id="dsky-mode">COAST</span></div>
+        <div class="dsky-row"><span>N42</span><span id="dsky-node">NO NODE</span></div>
+        <div class="dsky-row"><span>N81</span><span id="dsky-vector">DV +0000</span></div>
+        <div class="dsky-help">M MAP  N NODE  [ ] DV  B BURN  1/2/3/4 TOG</div>
     </div>
 
     <!-- Import Three.js core -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 
     <!-- Import application scripts -->
-    <script src="js/scaleManager.js?v=mocr5"></script>
-    <script src="js/physics.js?v=mocr5"></script>
-    <script src="js/planet.js?v=mocr5"></script>
-    <script src="js/spacecraft.js?v=mocr5"></script>
-    <script src="js/starCatalog.js?v=mocr5"></script>
-    <script src="js/navball.js?v=mocr5"></script>
-    <script src="js/audio.js?v=mocr5"></script>
-    <script src="js/scene.js?v=mocr5"></script>
-    <script src="js/main.js?v=mocr5"></script>
+    <script src="js/scaleManager.js?v=mocr6"></script>
+    <script src="js/physics.js?v=mocr6"></script>
+    <script src="js/planet.js?v=mocr6"></script>
+    <script src="js/spacecraft.js?v=mocr6"></script>
+    <script src="js/starCatalog.js?v=mocr6"></script>
+    <script src="js/navball.js?v=mocr6"></script>
+    <script src="js/audio.js?v=mocr6"></script>
+    <script src="js/scene.js?v=mocr6"></script>
+    <script src="js/main.js?v=mocr6"></script>
 </body>
 </html>
