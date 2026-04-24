@@ -42,6 +42,7 @@ class Scene {
             normalDV: 0,
             radialDV: 0,
             nodeTime: 0,
+            autoAlign: false,
             predictedOrbit: null
         };
 
@@ -561,6 +562,9 @@ class Scene {
             case 'b':
                 this.executeManeuver();
                 break;
+            case 'v':
+                this.toggleManeuverAutoAlign();
+                break;
             case '1':
                 this.toggleDisplayOption('orbit');
                 break;
@@ -720,6 +724,9 @@ class Scene {
 
         // Process inputs
         this.processInput(deltaTime);
+
+        // Let the maneuver computer steer attitude before physics advances.
+        this.updateManeuverAutoAlign(deltaTime);
 
         // Update physics
         this.updatePhysics(deltaTime);
@@ -1212,7 +1219,9 @@ class Scene {
 
         const maneuverStatus = document.getElementById('maneuver-status');
         if (maneuverStatus) {
-            maneuverStatus.textContent = this.maneuver.active ? 'ARMED' : 'NONE';
+            maneuverStatus.textContent = this.maneuver.active ?
+                (this.maneuver.autoAlign ? 'ALIGN' : 'ARMED') :
+                'NONE';
         }
         const maneuverDV = document.getElementById('maneuver-dv');
         if (maneuverDV) {
@@ -1221,7 +1230,9 @@ class Scene {
         const dskyMode = document.getElementById('dsky-mode');
         if (dskyMode) dskyMode.textContent = this.cameraMode.toUpperCase();
         const dskyNode = document.getElementById('dsky-node');
-        if (dskyNode) dskyNode.textContent = this.maneuver.active ? 'TIG ' + this.formatNodeTime(this.maneuver.nodeTime) : 'NO NODE';
+        if (dskyNode) dskyNode.textContent = this.maneuver.active ?
+            (this.maneuver.autoAlign ? 'ALN ' : 'TIG ') + this.formatNodeTime(this.maneuver.nodeTime) :
+            'NO NODE';
         const dskyVector = document.getElementById('dsky-vector');
         if (dskyVector) dskyVector.textContent = 'DV ' + this.getManeuverTotalDV().toFixed(0);
         this.updateNodeEditorDisplay();
@@ -1244,7 +1255,9 @@ class Scene {
         };
 
         const totalDV = this.getManeuverTotalDV();
-        setText('node-state', this.maneuver.active ? 'NODE ARMED' : 'NO NODE');
+        setText('node-state', this.maneuver.active ?
+            (this.maneuver.autoAlign ? 'ALIGNING' : 'NODE ARMED') :
+            'NO NODE');
         setText('node-total', totalDV.toFixed(0) + ' m/s');
         setText('node-time', this.formatNodeTime(this.maneuver.nodeTime));
         setText('node-prograde', this.formatSigned(this.maneuver.progradeDV, 0));
@@ -1261,6 +1274,10 @@ class Scene {
         }
 
         const burnSeconds = this.estimateManeuverBurnTime();
+        const ignitionSeconds = this.maneuver.nodeTime - (burnSeconds / 2);
+        setText('node-ignition', totalDV > 0 ? this.formatIgnitionTime(ignitionSeconds) : '--');
+        const alignError = this.getManeuverAlignmentErrorDeg();
+        setText('node-align-error', isFinite(alignError) ? alignError.toFixed(1) + ' deg' : '-- deg');
         setText('node-burn', burnSeconds > 0 ? burnSeconds.toFixed(1) + ' s' : '-- s');
     }
 
@@ -1278,6 +1295,12 @@ class Scene {
 
     formatSigned(value, decimals) {
         return (value >= 0 ? '+' : '-') + Math.abs(value).toFixed(decimals);
+    }
+
+    formatIgnitionTime(seconds) {
+        if (!isFinite(seconds)) return '--';
+        if (seconds <= 0) return 'BURN';
+        return 'T-' + this.formatNodeTime(seconds).slice(1);
     }
 
     /**
@@ -1599,6 +1622,7 @@ class Scene {
         this.maneuver.normalDV = 0;
         this.maneuver.radialDV = 0;
         this.maneuver.nodeTime = 0;
+        this.maneuver.autoAlign = false;
         this.updatePredictedTrajectory(true);
     }
 
@@ -1640,7 +1664,11 @@ class Scene {
                 this.maneuver.progradeDV = 0;
                 this.maneuver.normalDV = 0;
                 this.maneuver.radialDV = 0;
+                this.maneuver.autoAlign = false;
                 this.updatePredictedTrajectory(true);
+                break;
+            case 'align':
+                this.toggleManeuverAutoAlign();
                 break;
             case 'execute':
                 this.executeManeuver();
@@ -1724,6 +1752,64 @@ class Scene {
         const requiredPropellant = currentMass * (1 - Math.exp(-totalDV / exhaustVelocity));
         const usablePropellant = Math.min(requiredPropellant, this.spacecraft.spsPropellant);
         return usablePropellant / this.spacecraft.spsFlowRate;
+    }
+
+    toggleManeuverAutoAlign() {
+        if (!this.maneuver.active || this.getManeuverTotalDV() <= 0) {
+            this.createManeuver();
+        }
+        this.maneuver.autoAlign = !this.maneuver.autoAlign;
+        if (this.spacecraft && this.maneuver.autoAlign) {
+            this.spacecraft.sasActive = true;
+        }
+    }
+
+    updateManeuverAutoAlign(deltaTime) {
+        if (!this.maneuver.autoAlign || !this.spacecraft) return;
+
+        const target = this.getCurrentManeuverVectorVisual();
+        if (!target || target.lengthSq() < 1e-10) {
+            this.maneuver.autoAlign = false;
+            return;
+        }
+
+        const targetDirection = target.normalize();
+        const state = this.getNodeStateReal();
+        let up = new THREE.Vector3(0, 1, 0);
+        if (state && window.scaleManager) {
+            up = window.scaleManager.vectorToVisualizationSpace(state.position).normalize();
+        }
+        if (Math.abs(up.dot(targetDirection)) > 0.92) {
+            up = new THREE.Vector3(0, 0, 1);
+        }
+
+        const targetMatrix = new THREE.Matrix4().lookAt(
+            new THREE.Vector3(0, 0, 0),
+            targetDirection.clone().negate(),
+            up
+        );
+        const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(targetMatrix);
+        const slewRate = 1 - Math.exp(-deltaTime * 1.8);
+        this.spacecraft.mesh.quaternion.slerp(targetQuaternion, slewRate);
+        this.spacecraft.angularVelocity.x = 0;
+        this.spacecraft.angularVelocity.y = 0;
+        this.spacecraft.angularVelocity.z = 0;
+
+        if (this.getManeuverAlignmentErrorDeg() < 0.4) {
+            this.maneuver.autoAlign = false;
+        }
+    }
+
+    getManeuverAlignmentErrorDeg() {
+        if (!this.spacecraft || !this.maneuver.active || this.getManeuverTotalDV() <= 0) return Infinity;
+
+        const target = this.getCurrentManeuverVectorVisual();
+        if (!target || target.lengthSq() < 1e-10) return Infinity;
+
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.spacecraft.mesh.quaternion).normalize();
+        const targetDirection = target.normalize();
+        const dot = THREE.MathUtils.clamp(forward.dot(targetDirection), -1, 1);
+        return THREE.MathUtils.radToDeg(Math.acos(dot));
     }
 
     getNodeStateReal() {
