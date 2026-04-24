@@ -145,6 +145,112 @@ canvas#main-canvas {
     pointer-events: none;
 }
 
+#node-editor {
+    position: fixed;
+    right: 12px;
+    top: 12px;
+    width: 318px;
+    border: 1px solid var(--mocr-line);
+    background: #000;
+    color: var(--mocr-text);
+    z-index: 80;
+    font-size: 11px;
+    line-height: 1.25;
+    padding: 7px 8px 8px;
+    box-sizing: border-box;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+}
+
+.node-title {
+    color: var(--mocr-line);
+    border-bottom: 1px solid var(--mocr-dim);
+    margin-bottom: 6px;
+    padding-bottom: 2px;
+}
+
+.node-status,
+.node-row,
+.node-orbit div,
+.node-actions {
+    display: grid;
+    gap: 5px;
+    align-items: center;
+}
+
+.node-status {
+    grid-template-columns: 1fr auto;
+    color: var(--mocr-alert);
+    margin-bottom: 6px;
+}
+
+.node-section {
+    border-top: 1px solid var(--mocr-dim);
+    padding-top: 6px;
+    margin-top: 6px;
+}
+
+.node-row {
+    grid-template-columns: 4ch 32px 32px minmax(52px, 1fr) 32px 32px;
+    margin-top: 4px;
+}
+
+.node-label {
+    color: var(--mocr-dim);
+}
+
+.node-readout {
+    text-align: right;
+    color: var(--mocr-text);
+    overflow: hidden;
+}
+
+#node-editor button {
+    height: 20px;
+    border: 1px solid var(--mocr-dim);
+    background: #000;
+    color: var(--mocr-text);
+    font: inherit;
+    font-size: 10px;
+    padding: 0 3px;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+#node-editor button:hover,
+#node-editor button:focus {
+    border-color: var(--mocr-alert);
+    color: var(--mocr-alert);
+    outline: none;
+}
+
+#node-editor button:active {
+    background: var(--mocr-line);
+    color: #000;
+}
+
+.node-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 5px;
+}
+
+.node-main-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.node-orbit {
+    display: grid;
+    gap: 3px;
+}
+
+.node-orbit div {
+    grid-template-columns: 1fr auto;
+}
+
+.node-orbit span:first-child {
+    color: var(--mocr-dim);
+}
+
 .dsky-title {
     color: var(--mocr-line);
     border-bottom: 1px solid var(--mocr-dim);
@@ -215,6 +321,20 @@ canvas#main-canvas {
         width: 180px;
         font-size: 9px;
     }
+
+    #node-editor {
+        width: 286px;
+        font-size: 9px;
+    }
+
+    .node-row {
+        grid-template-columns: 4ch 28px 28px minmax(44px, 1fr) 28px 28px;
+    }
+
+    #node-editor button {
+        height: 18px;
+        font-size: 9px;
+    }
 }
 
 @media (max-width: 640px) {
@@ -225,5 +345,12 @@ canvas#main-canvas {
 
     .bar-column {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #node-editor {
+        top: 120px;
+        left: 6px;
+        right: 6px;
+        width: auto;
     }
 }

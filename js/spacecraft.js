@@ -24,10 +24,10 @@ class Spacecraft {
 
         // Rotation control properties
         this.rotationControl = {
-            rotationSpeed: 0.55,
-            angularDamping: 0.985,
-            sasDamping: 0.88,
-            maxAngularRate: 0.45
+            rotationSpeed: 0.24,
+            angularDamping: 0.975,
+            sasDamping: 0.82,
+            maxAngularRate: 0.18
         };
 
         // Angular velocity (radians/second) around local axes

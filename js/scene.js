@@ -35,6 +35,9 @@ class Scene {
         this.maneuver = {
             active: false,
             progradeDV: 0,
+            normalDV: 0,
+            radialDV: 0,
+            nodeTime: 0,
             predictedOrbit: null
         };
 
@@ -127,6 +130,7 @@ class Scene {
         this.setupResizeHandler();
 
         this.setupMapLabels();
+        this.setupNodeEditor();
     }
 
     /**
@@ -231,6 +235,35 @@ class Scene {
         }
     }
 
+    setupNodeEditor() {
+        const panel = document.getElementById('node-editor');
+        if (!panel) return;
+
+        panel.querySelectorAll('[data-node-axis]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                this.adjustManeuverComponent(
+                    button.dataset.nodeAxis,
+                    Number(button.dataset.nodeDelta)
+                );
+            });
+        });
+
+        panel.querySelectorAll('[data-node-time]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                this.adjustManeuverTime(Number(button.dataset.nodeTime));
+            });
+        });
+
+        panel.querySelectorAll('[data-node-action]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                this.handleNodeAction(button.dataset.nodeAction);
+            });
+        });
+    }
+
     /**
      * Setup grid and axes helpers (disabled - clean view)
      */
@@ -248,21 +281,24 @@ class Scene {
             return;
         }
 
-        // Filter to only the brightest stars. Sparse fixed line marks are calmer
-        // on a real CRT than shader point sprites, which can shimmer at subpixel sizes.
+        // Use the naked-eye catalog as fixed line marks. Short line strokes are
+        // calmer on a real CRT than shader point sprites at subpixel sizes.
         const bright = [];
         for (let i = 0; i < catalog.length; i++) {
-            if (catalog[i][2] < 3.5) bright.push(catalog[i]);
+            if (catalog[i][2] <= 6.0) bright.push(catalog[i]);
         }
 
         const R = 5000000;
         const count = bright.length;
         const positions = [];
+        const colors = [];
 
         for (let i = 0; i < count; i++) {
             const ra = bright[i][0];
             const dec = bright[i][1];
             const mag = bright[i][2];
+            const rgb = this.bvToRGB(bright[i][3]);
+            const intensity = THREE.MathUtils.clamp(1.1 - ((mag + 1.5) / 8.0), 0.18, 1.0);
 
             const raRad = ra * (Math.PI / 180);
             const decRad = dec * (Math.PI / 180);
@@ -279,17 +315,22 @@ class Scene {
             tangent.normalize();
 
             const center = dir.clone().multiplyScalar(R);
-            const halfLength = mag < 1.0 ? 1800 : 950;
+            const halfLength = mag < 1.0 ? 2200 : mag < 3.0 ? 1400 : 720;
             const a = center.clone().addScaledVector(tangent, -halfLength);
             const b = center.clone().addScaledVector(tangent, halfLength);
             positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+            colors.push(
+                rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity,
+                rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity
+            );
         }
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(colors), 3));
 
         const material = new THREE.LineBasicMaterial({
-            color: 0xffffff,
+            vertexColors: true,
             transparent: true,
             opacity: 0.85,
             depthWrite: false,
@@ -300,6 +341,8 @@ class Scene {
         // Rendered first each frame, then depth is cleared before the main scene.
         this.starScene = new THREE.Scene();
         const stars = new THREE.LineSegments(geometry, material);
+        stars.frustumCulled = false;
+        this.starField = stars;
         this.starScene.add(stars);
     }
 
@@ -480,16 +523,16 @@ class Scene {
                 this.toggleManeuverNode();
                 break;
             case '[':
-                this.adjustManeuverDV(-5);
+                this.adjustManeuverDV(-10);
                 break;
             case ']':
-                this.adjustManeuverDV(5);
+                this.adjustManeuverDV(10);
                 break;
             case '{':
-                this.adjustManeuverDV(-25);
+                this.adjustManeuverTime(-60);
                 break;
             case '}':
-                this.adjustManeuverDV(25);
+                this.adjustManeuverTime(60);
                 break;
             case 'b':
                 this.executeManeuver();
@@ -663,6 +706,9 @@ class Scene {
         this.renderer.autoClear = true;
         const activeCamera = this.getActiveCamera();
         if (this.starScene && this.displayOptions.stars) {
+            if (this.starField) {
+                this.starField.position.copy(activeCamera.position);
+            }
             this.renderer.render(this.starScene, activeCamera);
             // Clear only depth so main scene renders on top of star background
             this.renderer.autoClear = false;
@@ -1122,14 +1168,15 @@ class Scene {
         }
         const maneuverDV = document.getElementById('maneuver-dv');
         if (maneuverDV) {
-            maneuverDV.textContent = this.maneuver.progradeDV.toFixed(0);
+            maneuverDV.textContent = this.getManeuverTotalDV().toFixed(0);
         }
         const dskyMode = document.getElementById('dsky-mode');
         if (dskyMode) dskyMode.textContent = this.cameraMode.toUpperCase();
         const dskyNode = document.getElementById('dsky-node');
-        if (dskyNode) dskyNode.textContent = this.maneuver.active ? 'NODE SET' : 'NO NODE';
+        if (dskyNode) dskyNode.textContent = this.maneuver.active ? 'TIG ' + this.formatNodeTime(this.maneuver.nodeTime) : 'NO NODE';
         const dskyVector = document.getElementById('dsky-vector');
-        if (dskyVector) dskyVector.textContent = 'DV ' + (this.maneuver.progradeDV >= 0 ? '+' : '') + this.maneuver.progradeDV.toFixed(0);
+        if (dskyVector) dskyVector.textContent = 'DV ' + this.getManeuverTotalDV().toFixed(0);
+        this.updateNodeEditorDisplay();
     }
 
     timeToTrueAnomaly(orbit, targetTrueAnomaly) {
@@ -1142,9 +1189,47 @@ class Scene {
         return deltaM / meanMotion;
     }
 
+    updateNodeEditorDisplay() {
+        const setText = (id, text) => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = text;
+        };
+
+        const totalDV = this.getManeuverTotalDV();
+        setText('node-state', this.maneuver.active ? 'NODE ARMED' : 'NO NODE');
+        setText('node-total', totalDV.toFixed(0) + ' m/s');
+        setText('node-time', this.formatNodeTime(this.maneuver.nodeTime));
+        setText('node-prograde', this.formatSigned(this.maneuver.progradeDV, 0));
+        setText('node-normal', this.formatSigned(this.maneuver.normalDV, 0));
+        setText('node-radial', this.formatSigned(this.maneuver.radialDV, 0));
+
+        if (this.maneuver.predictedOrbit && this.planet && window.scaleManager) {
+            const radiusKm = window.scaleManager.toRealWorld(this.planet.radius) / 1000;
+            setText('node-ap', (this.maneuver.predictedOrbit.apoapsis / 1000 - radiusKm).toFixed(1) + ' km');
+            setText('node-pe', (this.maneuver.predictedOrbit.periapsis / 1000 - radiusKm).toFixed(1) + ' km');
+        } else {
+            setText('node-ap', '-- km');
+            setText('node-pe', '-- km');
+        }
+
+        const burnSeconds = this.estimateManeuverBurnTime();
+        setText('node-burn', burnSeconds > 0 ? burnSeconds.toFixed(1) + ' s' : '-- s');
+    }
+
     formatOrbitTime(seconds) {
         if (!isFinite(seconds)) return '--';
         return (seconds / 60).toFixed(1);
+    }
+
+    formatNodeTime(seconds) {
+        const clamped = Math.max(0, Math.round(seconds));
+        const minutes = Math.floor(clamped / 60);
+        const secs = clamped % 60;
+        return '+' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+
+    formatSigned(value, decimals) {
+        return (value >= 0 ? '+' : '-') + Math.abs(value).toFixed(decimals);
     }
 
     /**
@@ -1363,16 +1448,12 @@ class Scene {
         this.placeScreenLabel(this.mapLabels.pe, pe, 'PE');
         this.placeScreenLabel(this.mapLabels.ap, ap, 'AP');
         this.placeScreenLabel(this.mapLabels.ship, this.spacecraft.position, 'CSM');
+        const nodePosition = this.getNodeWorldPosition();
         this.placeScreenLabel(
             this.mapLabels.node,
-            this.spacecraft.position.clone().add(this.spacecraft.velocity.clone().normalize().multiplyScalar(320)),
-            this.maneuver.active ? 'NODE ' + signedNumber(this.maneuver.progradeDV, 0) : ''
+            nodePosition || this.spacecraft.position,
+            this.maneuver.active ? 'NODE DV ' + this.getManeuverTotalDV().toFixed(0) : ''
         );
-
-        function signedNumber(value, decimals) {
-            const fixed = Math.abs(value).toFixed(decimals);
-            return (value >= 0 ? '+' : '-') + fixed;
-        }
     }
 
     placeScreenLabel(element, worldPosition, text) {
@@ -1406,35 +1487,186 @@ class Scene {
     }
 
     toggleManeuverNode() {
-        this.maneuver.active = !this.maneuver.active;
-        if (this.maneuver.active && this.maneuver.progradeDV === 0) {
+        if (this.maneuver.active) {
+            this.clearManeuver();
+            return;
+        }
+        this.createManeuver();
+    }
+
+    createManeuver() {
+        this.maneuver.active = true;
+        if (this.getManeuverTotalDV() === 0) {
             this.maneuver.progradeDV = 10;
         }
-        if (!this.maneuver.active) {
-            this.maneuver.progradeDV = 0;
-        }
+        this.updatePredictedTrajectory(true);
+    }
+
+    clearManeuver() {
+        this.maneuver.active = false;
+        this.maneuver.progradeDV = 0;
+        this.maneuver.normalDV = 0;
+        this.maneuver.radialDV = 0;
+        this.maneuver.nodeTime = 0;
         this.updatePredictedTrajectory(true);
     }
 
     adjustManeuverDV(delta) {
+        this.adjustManeuverComponent('prograde', delta);
+    }
+
+    adjustManeuverComponent(axis, delta) {
         if (!this.maneuver.active) {
-            this.maneuver.active = true;
+            this.createManeuver();
         }
-        this.maneuver.progradeDV = THREE.MathUtils.clamp(this.maneuver.progradeDV + delta, -1500, 1500);
+
+        const property = axis + 'DV';
+        if (!(property in this.maneuver)) return;
+        this.maneuver[property] = THREE.MathUtils.clamp(this.maneuver[property] + delta, -3000, 3000);
         this.updatePredictedTrajectory(true);
+    }
+
+    adjustManeuverTime(deltaSeconds) {
+        if (!this.maneuver.active) {
+            this.createManeuver();
+        }
+
+        const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
+        const maxTime = orbit && isFinite(orbit.orbitalPeriod) ? orbit.orbitalPeriod : 86400;
+        this.maneuver.nodeTime = THREE.MathUtils.clamp(this.maneuver.nodeTime + deltaSeconds, 0, maxTime);
+        this.updatePredictedTrajectory(true);
+    }
+
+    handleNodeAction(action) {
+        switch (action) {
+            case 'create':
+                this.createManeuver();
+                break;
+            case 'clear':
+                this.clearManeuver();
+                break;
+            case 'zero':
+                this.maneuver.progradeDV = 0;
+                this.maneuver.normalDV = 0;
+                this.maneuver.radialDV = 0;
+                this.updatePredictedTrajectory(true);
+                break;
+            case 'execute':
+                this.executeManeuver();
+                break;
+            case 'now':
+                this.maneuver.nodeTime = 0;
+                this.createManeuver();
+                break;
+            case 'ap':
+                this.setNodeAtTrueAnomaly(Math.PI);
+                break;
+            case 'pe':
+                this.setNodeAtTrueAnomaly(0);
+                break;
+        }
+    }
+
+    setNodeAtTrueAnomaly(trueAnomaly) {
+        const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
+        if (!orbit) return;
+        this.maneuver.nodeTime = Math.max(0, this.timeToTrueAnomaly(orbit, trueAnomaly));
+        this.createManeuver();
+    }
+
+    getManeuverTotalDV() {
+        return Math.sqrt(
+            this.maneuver.progradeDV * this.maneuver.progradeDV +
+            this.maneuver.normalDV * this.maneuver.normalDV +
+            this.maneuver.radialDV * this.maneuver.radialDV
+        );
+    }
+
+    estimateManeuverBurnTime() {
+        if (!this.spacecraft) return 0;
+        const totalDV = this.getManeuverTotalDV();
+        if (totalDV <= 0) return 0;
+        const currentMass = this.spacecraft.getCurrentMass();
+        const exhaustVelocity = this.spacecraft.spsIsp * 9.81;
+        const requiredPropellant = currentMass * (1 - Math.exp(-totalDV / exhaustVelocity));
+        const usablePropellant = Math.min(requiredPropellant, this.spacecraft.spsPropellant);
+        return usablePropellant / this.spacecraft.spsFlowRate;
+    }
+
+    getNodeStateReal() {
+        if (!this.spacecraft || !this.planet || !window.scaleManager) return null;
+
+        const scaleManager = window.scaleManager;
+        const position = scaleManager.vectorToRealWorld(this.spacecraft.position.clone().sub(this.planet.mesh.position));
+        const velocity = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
+
+        if (this.maneuver.nodeTime <= 0) {
+            return { position, velocity };
+        }
+
+        const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
+        if (!orbit || orbit.eccentricity >= 1) {
+            return { position, velocity };
+        }
+
+        return physics.propagateKeplerian(orbit, this.planet.mass, this.maneuver.nodeTime) || { position, velocity };
+    }
+
+    getOrbitalFrameReal(position, velocity) {
+        const prograde = velocity.clone();
+        if (prograde.lengthSq() < 1e-10) prograde.set(0, 1, 0);
+        prograde.normalize();
+
+        const normal = new THREE.Vector3().crossVectors(position, velocity);
+        if (normal.lengthSq() < 1e-10) normal.set(0, 0, 1);
+        normal.normalize();
+
+        const radial = new THREE.Vector3().crossVectors(prograde, normal);
+        if (radial.lengthSq() < 1e-10) radial.copy(position);
+        radial.normalize();
+
+        return { prograde, normal, radial };
+    }
+
+    getManeuverVectorReal(state) {
+        if (!state) return new THREE.Vector3();
+        const frame = this.getOrbitalFrameReal(state.position, state.velocity);
+        return new THREE.Vector3()
+            .addScaledVector(frame.prograde, this.maneuver.progradeDV)
+            .addScaledVector(frame.normal, this.maneuver.normalDV)
+            .addScaledVector(frame.radial, this.maneuver.radialDV);
+    }
+
+    getNodeWorldPosition() {
+        const state = this.getNodeStateReal();
+        if (!state || !this.planet || !window.scaleManager) return null;
+        return window.scaleManager.vectorToVisualizationSpace(state.position).add(this.planet.mesh.position);
+    }
+
+    coastSpacecraftToNode(state) {
+        if (!state || !this.spacecraft || !this.planet || !window.scaleManager) return;
+        const scaleManager = window.scaleManager;
+        const visualPosition = scaleManager.vectorToVisualizationSpace(state.position).add(this.planet.mesh.position);
+        const visualVelocity = scaleManager.vectorToVisualizationSpace(state.velocity);
+        this.spacecraft.setPosition(visualPosition);
+        this.spacecraft.setVelocity(visualVelocity);
     }
 
     executeManeuver() {
         if (!this.maneuver.active || !this.spacecraft) return;
-        const requestedDV = this.maneuver.progradeDV;
-        const availableDV = this.spacecraft.consumeDeltaV(requestedDV);
-        const appliedDV = Math.sign(requestedDV) * availableDV;
+        const totalDV = this.getManeuverTotalDV();
+        if (totalDV <= 0) return;
+
+        const nodeState = this.getNodeStateReal();
+        if (!nodeState) return;
+
+        const requestedVector = this.getManeuverVectorReal(nodeState);
+        const availableDV = this.spacecraft.consumeDeltaV(totalDV);
+        const appliedVector = requestedVector.multiplyScalar(availableDV / totalDV);
         const scaleManager = window.scaleManager;
-        const direction = this.spacecraft.velocity.clone().normalize();
-        this.spacecraft.velocity.add(direction.multiplyScalar(scaleManager.velocityToVisualizationSpace(appliedDV)));
-        this.maneuver.active = false;
-        this.maneuver.progradeDV = 0;
-        this.updatePredictedTrajectory(true);
+        this.coastSpacecraftToNode(nodeState);
+        this.spacecraft.velocity.add(scaleManager.vectorToVisualizationSpace(appliedVector));
+        this.clearManeuver();
         this.createOrbitalTrajectory();
     }
 
@@ -1458,11 +1690,11 @@ class Scene {
         const scaleManager = window.scaleManager;
         if (!scaleManager) return;
 
-        const realPosition = scaleManager.vectorToRealWorld(this.spacecraft.position.clone().sub(this.planet.mesh.position));
-        const realVelocity = scaleManager.vectorToRealWorld(this.spacecraft.velocity);
-        const prograde = realVelocity.clone().normalize();
-        const plannedVelocity = realVelocity.clone().addScaledVector(prograde, this.maneuver.progradeDV);
-        const predicted = physics.calculateOrbitalParameters(realPosition, plannedVelocity, this.planet.mass);
+        const nodeState = this.getNodeStateReal();
+        if (!nodeState) return;
+
+        const plannedVelocity = nodeState.velocity.clone().add(this.getManeuverVectorReal(nodeState));
+        const predicted = physics.calculateOrbitalParameters(nodeState.position, plannedVelocity, this.planet.mass);
         if (!predicted || predicted.eccentricity >= 1 || predicted.semiMajorAxis <= 0) return;
 
         this.maneuver.predictedOrbit = predicted;
