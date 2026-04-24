@@ -162,6 +162,91 @@ canvas#main-canvas {
     font-variant-numeric: tabular-nums;
 }
 
+#mission-panel {
+    position: fixed;
+    left: 12px;
+    top: 112px;
+    width: 300px;
+    border: 1px solid var(--mocr-line);
+    background: #000;
+    color: var(--mocr-text);
+    z-index: 75;
+    font-size: 11px;
+    line-height: 1.25;
+    padding: 7px 8px 8px;
+    box-sizing: border-box;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+}
+
+.mission-title {
+    color: var(--mocr-line);
+    border-bottom: 1px solid var(--mocr-dim);
+    margin-bottom: 6px;
+    padding-bottom: 2px;
+}
+
+.mission-grid {
+    display: grid;
+    grid-template-columns: 6ch minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 2px;
+}
+
+.mission-grid span:nth-child(odd) {
+    color: var(--mocr-dim);
+}
+
+.mission-grid span:nth-child(even) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mission-actions {
+    border-top: 1px solid var(--mocr-dim);
+    margin-top: 7px;
+    padding-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+}
+
+#mission-panel button {
+    height: 20px;
+    border: 1px solid var(--mocr-dim);
+    background: #000;
+    color: var(--mocr-text);
+    font: inherit;
+    font-size: 10px;
+    padding: 0 3px;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+#mission-panel button:hover,
+#mission-panel button:focus {
+    border-color: var(--mocr-alert);
+    color: var(--mocr-alert);
+    outline: none;
+}
+
+#mission-panel button:active {
+    background: var(--mocr-line);
+    color: #000;
+}
+
+.mission-log {
+    border-top: 1px solid var(--mocr-dim);
+    margin-top: 7px;
+    padding-top: 5px;
+    color: var(--mocr-dim);
+    min-height: 52px;
+    display: grid;
+    align-content: start;
+    gap: 2px;
+}
+
 .node-title {
     color: var(--mocr-line);
     border-bottom: 1px solid var(--mocr-dim);
@@ -322,6 +407,21 @@ canvas#main-canvas {
         font-size: 9px;
     }
 
+    #mission-panel {
+        width: 250px;
+        top: 104px;
+        font-size: 9px;
+    }
+
+    .mission-actions {
+        gap: 4px;
+    }
+
+    #mission-panel button {
+        height: 18px;
+        font-size: 9px;
+    }
+
     #node-editor {
         width: 286px;
         font-size: 9px;
@@ -351,6 +451,13 @@ canvas#main-canvas {
         top: 120px;
         left: 6px;
         right: 6px;
+        width: auto;
+    }
+
+    #mission-panel {
+        left: 6px;
+        right: 6px;
+        top: 312px;
         width: auto;
     }
 }
