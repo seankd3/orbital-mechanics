@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spacecraft Simulator</title>
-    <link rel="stylesheet" href="style.css?v=mocr8">
+    <link rel="stylesheet" href="style.css?v=mocr9">
 </head>
 <body>
     <div id="bottom-bar">
@@ -125,7 +125,7 @@
         <div class="dsky-row"><span>V16</span><span id="dsky-mode">COAST</span></div>
         <div class="dsky-row"><span>N42</span><span id="dsky-node">NO NODE</span></div>
         <div class="dsky-row"><span>N81</span><span id="dsky-vector">DV +0000</span></div>
-        <div class="dsky-help">M MAP  CLICK ORB  [ ] DV  { } TIG  B BURN</div>
+        <div class="dsky-help">M MAP  CLICK ORB  [ ] DV  { } TIG  V ALIGN  B BURN</div>
     </div>
 
     <div id="node-editor">
@@ -181,11 +181,14 @@
         <div class="node-section node-orbit">
             <div><span>PRED AP</span><span id="node-ap">-- km</span></div>
             <div><span>PRED PE</span><span id="node-pe">-- km</span></div>
+            <div><span>IGN</span><span id="node-ignition">--</span></div>
+            <div><span>ERR</span><span id="node-align-error">-- deg</span></div>
             <div><span>BURN</span><span id="node-burn">-- s</span></div>
         </div>
 
         <div class="node-actions node-main-actions">
             <button type="button" data-node-action="create">CREATE</button>
+            <button type="button" data-node-action="align">ALIGN</button>
             <button type="button" data-node-action="zero">ZERO</button>
             <button type="button" data-node-action="clear">CLEAR</button>
             <button type="button" data-node-action="execute">BURN</button>
@@ -196,14 +199,14 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 
     <!-- Import application scripts -->
-    <script src="js/scaleManager.js?v=mocr8"></script>
-    <script src="js/physics.js?v=mocr8"></script>
-    <script src="js/planet.js?v=mocr8"></script>
-    <script src="js/spacecraft.js?v=mocr8"></script>
-    <script src="js/starCatalog.js?v=mocr8"></script>
-    <script src="js/navball.js?v=mocr8"></script>
-    <script src="js/audio.js?v=mocr8"></script>
-    <script src="js/scene.js?v=mocr8"></script>
-    <script src="js/main.js?v=mocr8"></script>
+    <script src="js/scaleManager.js?v=mocr9"></script>
+    <script src="js/physics.js?v=mocr9"></script>
+    <script src="js/planet.js?v=mocr9"></script>
+    <script src="js/spacecraft.js?v=mocr9"></script>
+    <script src="js/starCatalog.js?v=mocr9"></script>
+    <script src="js/navball.js?v=mocr9"></script>
+    <script src="js/audio.js?v=mocr9"></script>
+    <script src="js/scene.js?v=mocr9"></script>
+    <script src="js/main.js?v=mocr9"></script>
 </body>
 </html>
