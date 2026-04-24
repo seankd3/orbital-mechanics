@@ -316,6 +316,29 @@ class Spacecraft {
         return this.spsIsp * 9.81 * Math.log(currentMass / this.dryMass);
     }
 
+    consumeDeltaV(deltaV) {
+        const requested = Math.abs(deltaV);
+        if (requested <= 0 || this.spsPropellant <= 0) return 0;
+
+        const currentMass = this.getCurrentMass();
+        const effectiveExhaustVelocity = this.spsIsp * 9.81;
+        const requiredPropellant = currentMass * (1 - Math.exp(-requested / effectiveExhaustVelocity));
+        const usedPropellant = Math.min(requiredPropellant, this.spsPropellant);
+        this.spsPropellant -= usedPropellant;
+
+        const finalMass = currentMass - usedPropellant;
+        return effectiveExhaustVelocity * Math.log(currentMass / finalMass);
+    }
+
+    getAngularRateDeg() {
+        const rate = Math.sqrt(
+            this.angularVelocity.x * this.angularVelocity.x +
+            this.angularVelocity.y * this.angularVelocity.y +
+            this.angularVelocity.z * this.angularVelocity.z
+        );
+        return THREE.MathUtils.radToDeg(rate);
+    }
+
     /**
      * Burn SPS propellant for a given duration. Returns actual burn time.
      * @param {number} deltaTime - requested burn duration in seconds
