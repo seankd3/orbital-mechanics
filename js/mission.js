@@ -18,6 +18,10 @@ class ApolloMission {
         this.holdMode = null;
         this.burn = null;
         this.logs = [];
+        this.telemetryRecorder = window.ApolloTelemetryRecorder ?
+            new window.ApolloTelemetryRecorder({ maxSamples: 7200 }) :
+            null;
+        this._lastTelemetrySampleTime = -Infinity;
 
         this.moonOrbitRadius = 384400000;
         this.moonPeriod = 27.321661 * 86400;
@@ -219,7 +223,16 @@ class ApolloMission {
 
     postPhysics() {
         this.updateBurnProgress();
+        this.recordTelemetrySample();
         this.updateTelemetry();
+    }
+
+    recordTelemetrySample() {
+        if (!this.telemetryRecorder) return;
+        if (this.missionTime - this._lastTelemetrySampleTime < 1) return;
+
+        this.telemetryRecorder.record(this.scene, this, this.spacecraft);
+        this._lastTelemetrySampleTime = this.missionTime;
     }
 
     updateMoonPosition(deltaTime) {
