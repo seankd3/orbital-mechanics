@@ -43,6 +43,7 @@ class Scene {
             radialDV: 0,
             nodeTime: 0,
             autoAlign: false,
+            autoBurn: false,
             predictedOrbit: null
         };
 
@@ -731,6 +732,9 @@ class Scene {
         // Update physics
         this.updatePhysics(deltaTime);
 
+        // Advance maneuver countdown after the ship has moved for this frame.
+        this.updateManeuverCountdown(deltaTime * this.timeWarp.factor);
+
         // Update the camera
         this.updateCamera(deltaTime);
 
@@ -1220,7 +1224,7 @@ class Scene {
         const maneuverStatus = document.getElementById('maneuver-status');
         if (maneuverStatus) {
             maneuverStatus.textContent = this.maneuver.active ?
-                (this.maneuver.autoAlign ? 'ALIGN' : 'ARMED') :
+                (this.maneuver.autoBurn ? 'AUTO' : this.maneuver.autoAlign ? 'ALIGN' : 'ARMED') :
                 'NONE';
         }
         const maneuverDV = document.getElementById('maneuver-dv');
@@ -1231,7 +1235,7 @@ class Scene {
         if (dskyMode) dskyMode.textContent = this.cameraMode.toUpperCase();
         const dskyNode = document.getElementById('dsky-node');
         if (dskyNode) dskyNode.textContent = this.maneuver.active ?
-            (this.maneuver.autoAlign ? 'ALN ' : 'TIG ') + this.formatNodeTime(this.maneuver.nodeTime) :
+            (this.maneuver.autoBurn ? 'ARM ' : this.maneuver.autoAlign ? 'ALN ' : 'TIG ') + this.formatNodeTime(this.maneuver.nodeTime) :
             'NO NODE';
         const dskyVector = document.getElementById('dsky-vector');
         if (dskyVector) dskyVector.textContent = 'DV ' + this.getManeuverTotalDV().toFixed(0);
@@ -1256,7 +1260,7 @@ class Scene {
 
         const totalDV = this.getManeuverTotalDV();
         setText('node-state', this.maneuver.active ?
-            (this.maneuver.autoAlign ? 'ALIGNING' : 'NODE ARMED') :
+            (this.maneuver.autoBurn ? 'AUTO BURN' : this.maneuver.autoAlign ? 'ALIGNING' : 'NODE ARMED') :
             'NO NODE');
         setText('node-total', totalDV.toFixed(0) + ' m/s');
         setText('node-time', this.formatNodeTime(this.maneuver.nodeTime));
@@ -1623,6 +1627,7 @@ class Scene {
         this.maneuver.radialDV = 0;
         this.maneuver.nodeTime = 0;
         this.maneuver.autoAlign = false;
+        this.maneuver.autoBurn = false;
         this.updatePredictedTrajectory(true);
     }
 
@@ -1638,6 +1643,7 @@ class Scene {
         const property = axis + 'DV';
         if (!(property in this.maneuver)) return;
         this.maneuver[property] = THREE.MathUtils.clamp(this.maneuver[property] + delta, -3000, 3000);
+        this.maneuver.autoBurn = false;
         this.updatePredictedTrajectory(true);
     }
 
@@ -1649,6 +1655,7 @@ class Scene {
         const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
         const maxTime = orbit && isFinite(orbit.orbitalPeriod) ? orbit.orbitalPeriod : 86400;
         this.maneuver.nodeTime = THREE.MathUtils.clamp(this.maneuver.nodeTime + deltaSeconds, 0, maxTime);
+        this.maneuver.autoBurn = false;
         this.updatePredictedTrajectory(true);
     }
 
@@ -1665,6 +1672,7 @@ class Scene {
                 this.maneuver.normalDV = 0;
                 this.maneuver.radialDV = 0;
                 this.maneuver.autoAlign = false;
+                this.maneuver.autoBurn = false;
                 this.updatePredictedTrajectory(true);
                 break;
             case 'align':
@@ -1752,6 +1760,28 @@ class Scene {
         const requiredPropellant = currentMass * (1 - Math.exp(-totalDV / exhaustVelocity));
         const usablePropellant = Math.min(requiredPropellant, this.spacecraft.spsPropellant);
         return usablePropellant / this.spacecraft.spsFlowRate;
+    }
+
+    updateManeuverCountdown(deltaTime) {
+        if (!this.maneuver.active || this.maneuver.nodeTime <= 0) return;
+
+        this.maneuver.nodeTime = Math.max(0, this.maneuver.nodeTime - deltaTime);
+        if (this.maneuver.nodeTime <= 0.001) {
+            this.maneuver.nodeTime = 0;
+            if (this.maneuver.autoBurn) {
+                this.executeManeuver(true);
+            }
+        }
+    }
+
+    armManeuverBurn() {
+        if (!this.maneuver.active || this.getManeuverTotalDV() <= 0) return;
+
+        this.maneuver.autoBurn = true;
+        this.maneuver.autoAlign = true;
+        if (this.spacecraft) {
+            this.spacecraft.sasActive = true;
+        }
     }
 
     toggleManeuverAutoAlign() {
@@ -1878,10 +1908,15 @@ class Scene {
         this.spacecraft.setVelocity(visualVelocity);
     }
 
-    executeManeuver() {
+    executeManeuver(forceNow = false) {
         if (!this.maneuver.active || !this.spacecraft) return;
         const totalDV = this.getManeuverTotalDV();
         if (totalDV <= 0) return;
+
+        if (!forceNow && this.maneuver.nodeTime > 0.5) {
+            this.armManeuverBurn();
+            return;
+        }
 
         const nodeState = this.getNodeStateReal();
         if (!nodeState) return;
