@@ -31,6 +31,10 @@ class Scene {
         this.orbitalTrajectory = null;
         this.predictedTrajectory = null;
         this.mapOverlay = null;
+        this.maneuverMarker = null;
+        this.raycaster = new THREE.Raycaster();
+        this.raycaster.params.Line.threshold = 90;
+        this.pointer = new THREE.Vector2();
 
         this.maneuver = {
             active: false,
@@ -111,7 +115,10 @@ class Scene {
         this.mouseState = {
             isDragging: false,
             lastX: 0,
-            lastY: 0
+            lastY: 0,
+            startX: 0,
+            startY: 0,
+            moved: false
         };
 
         // Cached orbital parameters (computed once per frame)
@@ -399,10 +406,13 @@ class Scene {
      */
     setupControls() {
         document.addEventListener('mousedown', (event) => {
-            if (event.button === 0) {
+            if (event.button === 0 && event.target === this.renderer.domElement) {
                 this.mouseState.isDragging = true;
                 this.mouseState.lastX = event.clientX;
                 this.mouseState.lastY = event.clientY;
+                this.mouseState.startX = event.clientX;
+                this.mouseState.startY = event.clientY;
+                this.mouseState.moved = false;
             }
         });
 
@@ -410,6 +420,12 @@ class Scene {
             if (this.mouseState.isDragging) {
                 const deltaX = event.clientX - this.mouseState.lastX;
                 const deltaY = event.clientY - this.mouseState.lastY;
+                const totalX = event.clientX - this.mouseState.startX;
+                const totalY = event.clientY - this.mouseState.startY;
+
+                if (Math.hypot(totalX, totalY) > 5) {
+                    this.mouseState.moved = true;
+                }
 
                 this.cameraSettings.horizontalOrbit -= deltaX * this.cameraSettings.orbitSpeed;
                 this.cameraSettings.verticalOrbit += deltaY * this.cameraSettings.orbitSpeed;
@@ -424,7 +440,15 @@ class Scene {
             }
         });
 
-        document.addEventListener('mouseup', () => {
+        document.addEventListener('mouseup', (event) => {
+            if (
+                event.button === 0 &&
+                this.mouseState.isDragging &&
+                !this.mouseState.moved &&
+                event.target === this.renderer.domElement
+            ) {
+                this.placeNodeFromScreen(event.clientX, event.clientY);
+            }
             this.mouseState.isDragging = false;
         });
 
@@ -637,6 +661,7 @@ class Scene {
         this.planet = planet;
         this.scene.add(planet.mesh);
         this.createMapOverlay();
+        this.createManeuverMarker();
     }
 
     createMapOverlay() {
@@ -659,6 +684,28 @@ class Scene {
         this.mapOverlay = new THREE.LineSegments(geometry, material);
         this.mapOverlay.visible = false;
         this.scene.add(this.mapOverlay);
+    }
+
+    createManeuverMarker() {
+        if (this.maneuverMarker) {
+            this.scene.remove(this.maneuverMarker);
+            this.maneuverMarker.geometry.dispose();
+            this.maneuverMarker.material.dispose();
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(36), 3));
+        const material = new THREE.LineBasicMaterial({
+            color: 0xffef8a,
+            transparent: true,
+            opacity: 0.95,
+            depthTest: false,
+            depthWrite: false
+        });
+
+        this.maneuverMarker = new THREE.LineSegments(geometry, material);
+        this.maneuverMarker.visible = false;
+        this.scene.add(this.maneuverMarker);
     }
 
     /**
@@ -690,11 +737,12 @@ class Scene {
         this.updateOrbitalTrajectory();
         this.updatePredictedTrajectory();
         this.updateMapOverlay();
+        this.updateManeuverMarker();
         this.updateMapLabels();
 
         // Update navball
         if (this.navball && this.spacecraft && this.planet) {
-            this.navball.update(this.spacecraft, this.planet);
+            this.navball.update(this.spacecraft, this.planet, this.getCurrentManeuverVectorVisual());
         }
 
         // Update audio engine
@@ -1423,6 +1471,49 @@ class Scene {
         this.mapOverlay.geometry.computeBoundingSphere();
     }
 
+    updateManeuverMarker() {
+        if (!this.maneuverMarker || !this.spacecraft || !this.planet || !window.scaleManager) return;
+
+        this.maneuverMarker.visible = this.maneuver.active;
+        if (!this.maneuverMarker.visible) return;
+
+        const state = this.getNodeStateReal();
+        const nodePosition = this.getNodeWorldPosition();
+        if (!state || !nodePosition) return;
+
+        const frame = this.getOrbitalFrameReal(state.position, state.velocity);
+        const prograde = window.scaleManager.vectorToVisualizationSpace(frame.prograde).normalize();
+        const normal = window.scaleManager.vectorToVisualizationSpace(frame.normal).normalize();
+        const radial = window.scaleManager.vectorToVisualizationSpace(frame.radial).normalize();
+        const burn = window.scaleManager.vectorToVisualizationSpace(this.getManeuverVectorReal(state));
+        const burnDirection = burn.lengthSq() > 1e-10 ? burn.normalize() : prograde;
+
+        const markerSize = this.cameraMode === 'map' ? 230 : 72;
+        const burnLength = markerSize * THREE.MathUtils.clamp(this.getManeuverTotalDV() / 120, 0.7, 5.0);
+        const connector = this.cameraMode === 'map' ? this.spacecraft.position : nodePosition;
+        const points = [
+            nodePosition.clone().addScaledVector(prograde, -markerSize),
+            nodePosition.clone().addScaledVector(prograde, markerSize),
+            nodePosition.clone().addScaledVector(radial, -markerSize * 0.72),
+            nodePosition.clone().addScaledVector(radial, markerSize * 0.72),
+            nodePosition.clone().addScaledVector(normal, -markerSize * 0.52),
+            nodePosition.clone().addScaledVector(normal, markerSize * 0.52),
+            connector.clone(),
+            nodePosition.clone(),
+            nodePosition.clone(),
+            nodePosition.clone().addScaledVector(burnDirection, burnLength),
+            nodePosition.clone().addScaledVector(burnDirection, burnLength).addScaledVector(radial, -markerSize * 0.18),
+            nodePosition.clone().addScaledVector(burnDirection, burnLength),
+        ];
+
+        const attribute = this.maneuverMarker.geometry.attributes.position;
+        for (let i = 0; i < points.length; i++) {
+            attribute.setXYZ(i, points[i].x, points[i].y, points[i].z);
+        }
+        attribute.needsUpdate = true;
+        this.maneuverMarker.geometry.computeBoundingSphere();
+    }
+
     updateMapLabels() {
         if (!this.mapLabels) return;
         const visible = this.cameraMode === 'map' && this.planet && this.spacecraft && this._cachedOrbitalParams;
@@ -1574,6 +1665,48 @@ class Scene {
         this.createManeuver();
     }
 
+    placeNodeFromScreen(clientX, clientY) {
+        if (!this.orbitalTrajectory || !this.spacecraft || !this.planet || !window.scaleManager) return;
+
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+        this.raycaster.setFromCamera(this.pointer, this.getActiveCamera());
+
+        const hits = this.raycaster.intersectObject(this.orbitalTrajectory, false);
+        if (hits.length === 0) return;
+
+        this.setNodeAtWorldPosition(hits[0].point);
+    }
+
+    setNodeAtWorldPosition(worldPosition) {
+        const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
+        if (!orbit || orbit.eccentricity >= 1 || !window.scaleManager) return;
+
+        const realPosition = window.scaleManager.vectorToRealWorld(worldPosition.clone().sub(this.planet.mesh.position));
+        if (realPosition.lengthSq() < 1e-8) return;
+
+        let periDir = orbit.eVector.clone();
+        if (periDir.lengthSq() < 1e-12) {
+            periDir = window.scaleManager.vectorToRealWorld(
+                this.spacecraft.position.clone().sub(this.planet.mesh.position)
+            );
+        }
+        periDir.normalize();
+
+        const orbitNormal = orbit.h.clone().normalize();
+        const planeY = new THREE.Vector3().crossVectors(orbitNormal, periDir).normalize();
+        const projected = realPosition.sub(
+            orbitNormal.clone().multiplyScalar(realPosition.dot(orbitNormal))
+        ).normalize();
+
+        let trueAnomaly = Math.atan2(projected.dot(planeY), projected.dot(periDir));
+        if (trueAnomaly < 0) trueAnomaly += Math.PI * 2;
+
+        this.maneuver.nodeTime = Math.max(0, this.timeToTrueAnomaly(orbit, trueAnomaly));
+        this.createManeuver();
+    }
+
     getManeuverTotalDV() {
         return Math.sqrt(
             this.maneuver.progradeDV * this.maneuver.progradeDV +
@@ -1635,6 +1768,13 @@ class Scene {
             .addScaledVector(frame.prograde, this.maneuver.progradeDV)
             .addScaledVector(frame.normal, this.maneuver.normalDV)
             .addScaledVector(frame.radial, this.maneuver.radialDV);
+    }
+
+    getCurrentManeuverVectorVisual() {
+        if (!this.maneuver.active || this.getManeuverTotalDV() <= 0 || !window.scaleManager) return null;
+        const state = this.getNodeStateReal();
+        if (!state) return null;
+        return window.scaleManager.vectorToVisualizationSpace(this.getManeuverVectorReal(state));
     }
 
     getNodeWorldPosition() {
