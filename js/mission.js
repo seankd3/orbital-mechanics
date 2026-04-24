@@ -98,9 +98,15 @@ class ApolloMission {
             <div class="mission-grid">
                 <span>PHASE</span><span data-mission="phase">PRELAUNCH</span>
                 <span>MET</span><span data-mission="met">000:00:00</span>
-                <span>BODY</span><span data-mission="body">EARTH</span>
+                <span>ACTIVE</span><span data-mission="body">EARTH</span>
                 <span>VEH</span><span data-mission="vehicle">SATURN V</span>
                 <span>GUID</span><span data-mission="guidance">IDLE</span>
+                <span>AP</span><span data-mission="ap">--</span>
+                <span>PE</span><span data-mission="pe">--</span>
+                <span>TTA</span><span data-mission="tta">--</span>
+                <span>TTP</span><span data-mission="ttp">--</span>
+                <span>TLI DV</span><span data-mission="tli-dv">--</span>
+                <span>CIRC</span><span data-mission="circ-dv">--</span>
                 <span>RANGE</span><span data-mission="range">--</span>
             </div>
             <div class="mission-actions">
@@ -110,7 +116,11 @@ class ApolloMission {
                 <button type="button" data-apollo="hold-prograde">PRO</button>
                 <button type="button" data-apollo="hold-retrograde">RET</button>
                 <button type="button" data-apollo="hold-radial">RAD</button>
+                <button type="button" data-apollo="hold-radial-in">RIN</button>
+                <button type="button" data-apollo="hold-normal">NRM</button>
+                <button type="button" data-apollo="hold-antinormal">AN</button>
                 <button type="button" data-apollo="tli">TLI</button>
+                <button type="button" data-apollo="circularize">CIRC</button>
                 <button type="button" data-apollo="dock">DOCK</button>
                 <button type="button" data-apollo="loi">LOI</button>
                 <button type="button" data-apollo="lm">LM</button>
@@ -149,8 +159,20 @@ class ApolloMission {
             case 'hold-radial':
                 this.setHold('radialOut');
                 break;
+            case 'hold-radial-in':
+                this.setHold('radialIn');
+                break;
+            case 'hold-normal':
+                this.setHold('normal');
+                break;
+            case 'hold-antinormal':
+                this.setHold('antiNormal');
+                break;
             case 'tli':
-                this.startFixedBurn('prograde', 3150, 'TLI');
+                this.startTliBurn();
+                break;
+            case 'circularize':
+                this.startCircularizeBurn();
                 break;
             case 'dock':
                 this.transpositionDock();
@@ -414,7 +436,33 @@ class ApolloMission {
         this.holdMode = mode;
         this.guidance = { type: 'hold', mode };
         this.spacecraft.sasActive = true;
-        this.log('HOLD ' + mode.toUpperCase());
+        this.log('HOLD ' + this.formatHoldMode(mode));
+    }
+
+    startTliBurn() {
+        const estimate = this.computeTliDeltaV();
+        if (!estimate || !isFinite(estimate.deltaV)) {
+            this.log('TLI NO SOLUTION');
+            return;
+        }
+        if (estimate.deltaV <= 0.5) {
+            this.log('TLI DV ZERO');
+            return;
+        }
+        this.startFixedBurn(estimate.mode, estimate.deltaV, 'TLI');
+    }
+
+    startCircularizeBurn() {
+        const assist = this.computeCircularizeDeltaV(this.primaryBody);
+        if (!assist || !isFinite(assist.deltaV)) {
+            this.log('CIRC NO SOLUTION');
+            return;
+        }
+        if (assist.deltaV <= 0.5) {
+            this.log('CIRC OK');
+            return;
+        }
+        this.startFixedBurn(assist.mode, assist.deltaV, 'CIRC');
     }
 
     startFixedBurn(mode, deltaV, label) {
@@ -484,13 +532,73 @@ class ApolloMission {
 
     computeOrbit(body) {
         if (!body || !this.spacecraft) return null;
-        const relPosition = this.scaleManager.vectorToRealWorld(
-            this.spacecraft.position.clone().sub(body.mesh.position)
-        );
-        const relVelocity = this.scaleManager.vectorToRealWorld(
-            this.spacecraft.velocity.clone().sub(body.velocity || new THREE.Vector3())
-        );
+        const state = this.getRelativeState(body);
+        if (!state) return null;
+        const relPosition = state.position;
+        const relVelocity = state.velocity;
         return physics.calculateOrbitalParameters(relPosition, relVelocity, body.mass);
+    }
+
+    getRelativeState(body) {
+        if (!body || !body.mesh || !this.spacecraft || !this.scaleManager) return null;
+        return {
+            position: this.scaleManager.vectorToRealWorld(
+                this.spacecraft.position.clone().sub(body.mesh.position)
+            ),
+            velocity: this.scaleManager.vectorToRealWorld(
+                this.spacecraft.velocity.clone().sub(body.velocity || new THREE.Vector3())
+            )
+        };
+    }
+
+    computeTliDeltaV() {
+        if (this.primaryBody !== this.earth) return null;
+
+        const state = this.getRelativeState(this.earth);
+        if (!state) return null;
+
+        const radius = state.position.length();
+        const currentSpeed = state.velocity.length();
+        const transferRadius = Math.max(this.getMoonTransferRadius(), radius + 1);
+        const mu = physics.G * this.earth.mass;
+        const transferSemiMajorAxis = (radius + transferRadius) / 2;
+        const transferSpeed = Math.sqrt(mu * ((2 / radius) - (1 / transferSemiMajorAxis)));
+        const signedDeltaV = transferSpeed - currentSpeed;
+
+        return this.createDeltaVEstimate(signedDeltaV, transferSpeed, currentSpeed);
+    }
+
+    computeCircularizeDeltaV(body) {
+        const state = this.getRelativeState(body);
+        if (!state || !body) return null;
+
+        const radius = state.position.length();
+        if (radius <= 0) return null;
+
+        const mu = physics.G * body.mass;
+        const currentSpeed = state.velocity.length();
+        const circularSpeed = Math.sqrt(mu / radius);
+        const signedDeltaV = circularSpeed - currentSpeed;
+
+        return this.createDeltaVEstimate(signedDeltaV, circularSpeed, currentSpeed);
+    }
+
+    createDeltaVEstimate(signedDeltaV, targetSpeed, currentSpeed) {
+        if (!isFinite(signedDeltaV)) return null;
+        return {
+            signedDeltaV,
+            deltaV: Math.abs(signedDeltaV),
+            mode: signedDeltaV >= 0 ? 'prograde' : 'retrograde',
+            targetSpeed,
+            currentSpeed
+        };
+    }
+
+    getMoonTransferRadius() {
+        if (!this.moon || !this.moon.mesh || !this.earth || !this.earth.mesh) {
+            return this.moonOrbitRadius;
+        }
+        return this.scaleManager.toRealWorld(this.moon.mesh.position.distanceTo(this.earth.mesh.position));
     }
 
     getEastVector(radial) {
@@ -518,15 +626,27 @@ class ApolloMission {
         const moonRange = this.spacecraft ?
             this.scaleManager.toRealWorld(this.spacecraft.position.distanceTo(this.moon.mesh.position)) :
             Infinity;
+        const activeBody = this.primaryBody || this.earth;
+        const orbit = this.computeOrbit(activeBody);
+        const bodyRadius = activeBody ? this.scaleManager.toRealWorld(activeBody.radius) : 0;
+        const tliEstimate = this.computeTliDeltaV();
+        const circularizeEstimate = this.computeCircularizeDeltaV(activeBody);
         const guidanceLabel = this.guidance ?
-            (this.guidance.type === 'burn' && this.burn ? this.burn.label + ' ' + this.burn.remainingDV.toFixed(0) : this.guidance.type.toUpperCase()) :
+            (this.guidance.type === 'burn' && this.burn ? this.burn.label + ' ' + this.burn.remainingDV.toFixed(0) :
+                this.guidance.type === 'hold' ? 'HOLD ' + this.formatHoldMode(this.guidance.mode) : this.guidance.type.toUpperCase()) :
             'IDLE';
 
         setText('phase', this.phase);
         setText('met', this.formatMET(this.missionTime));
-        setText('body', this.primaryBody ? this.primaryBody.name.toUpperCase() : 'EARTH');
+        setText('body', activeBody ? activeBody.name.toUpperCase() : 'EARTH');
         setText('vehicle', this.spacecraft.getVehicleLabel ? this.spacecraft.getVehicleLabel() : 'CSM');
         setText('guidance', guidanceLabel);
+        setText('ap', orbit ? this.formatOrbitAltitude(orbit.apoapsis, bodyRadius) : '--');
+        setText('pe', orbit ? this.formatOrbitAltitude(orbit.periapsis, bodyRadius) : '--');
+        setText('tta', orbit ? this.formatDuration(this.timeToTrueAnomaly(orbit, Math.PI)) : '--');
+        setText('ttp', orbit ? this.formatDuration(this.timeToTrueAnomaly(orbit, 0)) : '--');
+        setText('tli-dv', this.formatDeltaVEstimate(tliEstimate));
+        setText('circ-dv', this.formatDeltaVEstimate(circularizeEstimate));
         setText('range', this.formatDistance(moonRange));
 
         const logElement = this.panel.querySelector('[data-mission="log"]');
@@ -543,10 +663,60 @@ class ApolloMission {
             String(secs).padStart(2, '0');
     }
 
+    timeToTrueAnomaly(orbit, targetTrueAnomaly) {
+        if (!orbit || orbit.eccentricity >= 1 || !isFinite(orbit.orbitalPeriod)) return Infinity;
+        const currentM = physics.trueToMeanAnomaly(orbit.trueAnomaly, orbit.eccentricity);
+        const targetM = physics.trueToMeanAnomaly(targetTrueAnomaly, orbit.eccentricity);
+        const meanMotion = (Math.PI * 2) / orbit.orbitalPeriod;
+        let deltaM = targetM - currentM;
+        while (deltaM < 0) deltaM += Math.PI * 2;
+        return deltaM / meanMotion;
+    }
+
+    formatDuration(seconds) {
+        if (!isFinite(seconds)) return '--';
+        const total = Math.max(0, Math.floor(seconds));
+        const days = Math.floor(total / 86400);
+        const hours = Math.floor((total % 86400) / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const secs = total % 60;
+        if (days > 0) {
+            return days + 'd ' + String(hours).padStart(2, '0') + ':' +
+                String(minutes).padStart(2, '0');
+        }
+        return String(hours).padStart(2, '0') + ':' +
+            String(minutes).padStart(2, '0') + ':' +
+            String(secs).padStart(2, '0');
+    }
+
     formatDistance(meters) {
         if (!isFinite(meters)) return '--';
-        if (meters >= 1000000) return (meters / 1000000).toFixed(1) + ' Mm';
-        return (meters / 1000).toFixed(0) + ' km';
+        const sign = meters < 0 ? '-' : '';
+        const absMeters = Math.abs(meters);
+        if (absMeters >= 1000000) return sign + (absMeters / 1000000).toFixed(1) + ' Mm';
+        return sign + (absMeters / 1000).toFixed(0) + ' km';
+    }
+
+    formatOrbitAltitude(radius, bodyRadius) {
+        if (!isFinite(radius)) return 'ESC';
+        return this.formatDistance(radius - bodyRadius);
+    }
+
+    formatDeltaVEstimate(estimate) {
+        if (!estimate || !isFinite(estimate.deltaV)) return '--';
+        return (estimate.mode === 'prograde' ? 'PRO ' : 'RET ') + estimate.deltaV.toFixed(0);
+    }
+
+    formatHoldMode(mode) {
+        const labels = {
+            prograde: 'PRO',
+            retrograde: 'RET',
+            radialOut: 'RAD OUT',
+            radialIn: 'RAD IN',
+            normal: 'NORMAL',
+            antiNormal: 'ANTI-NORMAL'
+        };
+        return labels[mode] || String(mode || 'HOLD').toUpperCase();
     }
 
     log(message) {
