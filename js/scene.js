@@ -1763,14 +1763,17 @@ class Scene {
     }
 
     updateManeuverCountdown(deltaTime) {
-        if (!this.maneuver.active || this.maneuver.nodeTime <= 0) return;
+        if (!this.maneuver.active || this.maneuver.nodeTime <= 0 || deltaTime <= 0) return;
 
         this.maneuver.nodeTime = Math.max(0, this.maneuver.nodeTime - deltaTime);
+        const ignitionLeadTime = this.estimateManeuverBurnTime() / 2;
+        if (this.maneuver.autoBurn && this.maneuver.nodeTime <= ignitionLeadTime) {
+            this.executeManeuver(true);
+            return;
+        }
+
         if (this.maneuver.nodeTime <= 0.001) {
             this.maneuver.nodeTime = 0;
-            if (this.maneuver.autoBurn) {
-                this.executeManeuver(true);
-            }
         }
     }
 
@@ -1913,7 +1916,8 @@ class Scene {
         const totalDV = this.getManeuverTotalDV();
         if (totalDV <= 0) return;
 
-        if (!forceNow && this.maneuver.nodeTime > 0.5) {
+        const ignitionLeadTime = this.estimateManeuverBurnTime() / 2;
+        if (!forceNow && this.maneuver.nodeTime > ignitionLeadTime) {
             this.armManeuverBurn();
             return;
         }
