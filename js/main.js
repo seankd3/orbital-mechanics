@@ -37,6 +37,13 @@ function init() {
     initializeSpacecraftOrbit(spacecraft, earth);
 
     gameScene.addSpacecraft(spacecraft);
+
+    if (window.ApolloMission) {
+        gameScene.mission = new ApolloMission(gameScene, spacecraft, earth, scaleManager);
+    } else {
+        initializeSpacecraftOrbit(spacecraft, earth);
+    }
+
     gameScene.start();
 }
 
