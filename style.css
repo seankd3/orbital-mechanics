@@ -1,77 +1,114 @@
+html {
+    --mocr-bg: #000;
+    --mocr-line: #b8f6c4;
+    --mocr-text: #d8ffe0;
+    --mocr-dim: #6fa979;
+    --mocr-alert: #ffef8a;
+}
+
 body {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background-color: #000;
+    background-color: var(--mocr-bg);
     display: flex;
     flex-direction: column;
     height: 100vh;
+    width: 100vw;
+    font-family: "Courier New", Courier, monospace;
 }
 
-canvas {
+canvas#main-canvas {
     display: block;
     flex: 1;
     min-height: 0;
 }
 
-#bottom-bar {
-    flex-shrink: 0;
-    height: 140px;
+#navball-container {
+    flex: none !important;
     background: #000;
-    border-top: 1px solid #ff8800;
-    display: flex;
-    align-items: flex-start;
-    padding: 8px 24px;
-    gap: 0;
-    z-index: 100;
-    font-family: 'Courier New', 'Courier', monospace;
-    font-size: 13px;
-    color: #cc7700;
-    text-transform: uppercase;
+    border: 1px solid var(--mocr-line);
     box-sizing: border-box;
 }
 
+#navball-container canvas {
+    flex: none !important;
+    max-width: none !important;
+    max-height: none !important;
+}
+
+#bottom-bar {
+    flex-shrink: 0;
+    height: 112px;
+    background: var(--mocr-bg);
+    border-top: 1px solid var(--mocr-line);
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) minmax(340px, 1.2fr);
+    align-items: stretch;
+    padding: 8px 12px;
+    gap: 10px;
+    z-index: 100;
+    font-size: 12px;
+    color: var(--mocr-text);
+    text-transform: uppercase;
+    box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+    width: 100vw;
+    min-width: 0;
+}
+
 .bar-column {
-    flex: 1;
-    padding: 0 16px;
+    min-width: 0;
+    border: 1px solid var(--mocr-dim);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 12px;
+    row-gap: 1px;
+    padding: 5px 8px 6px;
+    box-sizing: border-box;
 }
 
 .bar-divider {
-    color: #664400;
-    font-size: 13px;
-    line-height: 140px;
-    padding: 0 4px;
-    user-select: none;
+    display: none;
 }
 
 .section-header {
-    color: #ff8800;
-    font-weight: bold;
-    margin-bottom: 6px;
-    letter-spacing: 0.1em;
-    font-size: 13px;
+    color: var(--mocr-line);
+    grid-column: 1 / -1;
+    font-weight: normal;
+    margin-bottom: 2px;
+    letter-spacing: 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--mocr-dim);
+    line-height: 1.35;
 }
 
 .info-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 2px;
-    line-height: 1.5;
+    display: grid;
+    grid-template-columns: 4ch minmax(0, 1fr) auto;
+    gap: 6px;
+    min-width: 0;
+    line-height: 1.28;
+    white-space: nowrap;
+}
+
+.info-row.wide {
+    grid-column: 1 / -1;
 }
 
 .var-name {
-    color: #996600;
-    min-width: 3ch;
+    color: var(--mocr-dim);
 }
 
 .data-value {
-    color: #ff8800;
-    font-weight: bold;
+    color: var(--mocr-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .data-unit {
-    color: #664400;
-    font-size: 12px;
+    color: var(--mocr-dim);
+    font-size: 11px;
 }
 
 #time-warp-indicator {
@@ -79,14 +116,55 @@ canvas {
     position: fixed;
     top: 12px;
     right: 16px;
-    background: #330000;
-    color: #ff3333;
-    font-family: 'Courier New', 'Courier', monospace;
-    font-weight: bold;
-    font-size: 14px;
-    padding: 4px 10px;
-    border: 1px solid #ff3333;
+    background: #000;
+    color: var(--mocr-alert);
+    font-weight: normal;
+    font-size: 12px;
+    padding: 3px 8px;
+    border: 1px solid var(--mocr-alert);
     text-transform: uppercase;
-    letter-spacing: 0.15em;
+    letter-spacing: 0;
     z-index: 200;
+}
+
+@media (max-width: 920px), (max-aspect-ratio: 4 / 5) {
+    #bottom-bar {
+        height: 136px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        padding: 6px;
+        overflow: hidden;
+        font-size: 10px;
+    }
+
+    .bar-column {
+        grid-template-columns: 1fr;
+        padding: 4px 5px;
+        column-gap: 4px;
+    }
+
+    .section-header {
+        font-size: 10px;
+    }
+
+    .info-row {
+        grid-template-columns: 4ch minmax(0, 1fr) auto;
+        gap: 4px;
+        line-height: 1.22;
+    }
+
+    .data-unit {
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 640px) {
+    #bottom-bar {
+        height: 174px;
+        grid-template-columns: 1fr;
+    }
+
+    .bar-column {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
