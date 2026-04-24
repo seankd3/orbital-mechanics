@@ -22,6 +22,18 @@ class Planet {
         this.name = params.name || 'Earth';
         this.rotationPeriod = params.rotationPeriod || 86400; // seconds (Earth: 24 hours)
         this.obliquity = params.obliquity || 23.44 * Math.PI / 180; // radians (Earth: 23.44 degrees)
+        this.lineColor = params.lineColor || 0x1f7cda;
+        this.gridOpacity = params.gridOpacity === undefined ? 0.7 : params.gridOpacity;
+        this.coastlineColor = params.coastlineColor || 0xffffff;
+        this.coastlineOpacity = params.coastlineOpacity === undefined ? 0.6 : params.coastlineOpacity;
+        this.showGrid = params.showGrid !== false;
+        this.showCoastlines = params.showCoastlines !== false;
+        this.craters = params.craters || [];
+        this.craterColor = params.craterColor || 0x9a9a9a;
+        this.craterOpacity = params.craterOpacity === undefined ? 0.55 : params.craterOpacity;
+        this.orbit = params.orbit || null;
+        this.soiRadius = params.soiRadius || null;
+        this.velocity = new THREE.Vector3();
 
         // Create the mesh
         this.createPlanetMesh();
@@ -45,10 +57,18 @@ class Planet {
         this.mesh.add(this.planetMesh);
 
         // Generate lat/lon grid lines
-        this.createLatLonGrid();
+        if (this.showGrid) {
+            this.createLatLonGrid();
+        }
 
         // Load coastlines asynchronously (pops in after grid is visible)
-        this.loadCoastlines();
+        if (this.showCoastlines) {
+            this.loadCoastlines();
+        }
+
+        if (this.craters.length > 0) {
+            this.createCraterLines();
+        }
     }
 
     /**
@@ -85,9 +105,9 @@ class Planet {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
 
         const material = new THREE.LineBasicMaterial({
-            color: 0x1f7cda,
+            color: this.lineColor,
             transparent: true,
-            opacity: 0.7
+            opacity: this.gridOpacity
         });
 
         this.gridLines = new THREE.LineSegments(geometry, material);
@@ -135,9 +155,9 @@ class Planet {
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
 
             const material = new THREE.LineBasicMaterial({
-                color: 0xffffff,
+                color: this.coastlineColor,
                 transparent: true,
-                opacity: 0.6
+                opacity: this.coastlineOpacity
             });
 
             this.coastlineSegments = new THREE.LineSegments(geometry, material);
@@ -147,6 +167,58 @@ class Planet {
         }
     }
 
+    /**
+     * Create simple crater rim linework for airless bodies.
+     */
+    createCraterLines() {
+        const positions = [];
+        const surfaceRadius = this.radius * 1.002;
+
+        for (let i = 0; i < this.craters.length; i++) {
+            const crater = this.craters[i];
+            const lat = crater.lat || 0;
+            const lon = crater.lon || 0;
+            const angularRadius = THREE.MathUtils.degToRad(crater.radiusDeg || 2);
+            const segments = crater.segments || 36;
+
+            const center = latLonToVector3(lat, lon, 1).normalize();
+            let east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), center);
+            if (east.lengthSq() < 0.0001) {
+                east = new THREE.Vector3().crossVectors(new THREE.Vector3(1, 0, 0), center);
+            }
+            east.normalize();
+            const north = new THREE.Vector3().crossVectors(center, east).normalize();
+
+            for (let j = 0; j < segments; j++) {
+                const a1 = (j / segments) * Math.PI * 2;
+                const a2 = ((j + 1) / segments) * Math.PI * 2;
+                const p1 = center.clone().multiplyScalar(Math.cos(angularRadius))
+                    .addScaledVector(east, Math.cos(a1) * Math.sin(angularRadius))
+                    .addScaledVector(north, Math.sin(a1) * Math.sin(angularRadius))
+                    .normalize()
+                    .multiplyScalar(surfaceRadius);
+                const p2 = center.clone().multiplyScalar(Math.cos(angularRadius))
+                    .addScaledVector(east, Math.cos(a2) * Math.sin(angularRadius))
+                    .addScaledVector(north, Math.sin(a2) * Math.sin(angularRadius))
+                    .normalize()
+                    .multiplyScalar(surfaceRadius);
+
+                positions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+            }
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
+
+        const material = new THREE.LineBasicMaterial({
+            color: this.craterColor,
+            transparent: true,
+            opacity: this.craterOpacity
+        });
+
+        this.craterLines = new THREE.LineSegments(geometry, material);
+        this.mesh.add(this.craterLines);
+    }
 
     /**
      * Calculate gravitational force on an object
