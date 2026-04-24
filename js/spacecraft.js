@@ -173,6 +173,7 @@ class Spacecraft {
         this.mesh.position.copy(oldPosition);
         this.mesh.quaternion.copy(oldQuaternion);
         this.syncActiveStagePerformance();
+        this.applyRotationProfile();
     }
 
     applyVehicleSpec(spec) {
@@ -200,6 +201,47 @@ class Spacecraft {
         this.rcsPropellant = 0;
         this.rcsMaxPropellant = 1;
         this.positionThrusterMesh();
+    }
+
+    applyRotationProfile() {
+        const profiles = {
+            'saturn-v': {
+                rotationSpeed: 0.08,
+                angularDamping: 0.985,
+                sasDamping: 0.88,
+                maxAngularRate: 0.045
+            },
+            'csm-lm': {
+                rotationSpeed: 0.16,
+                angularDamping: 0.97,
+                sasDamping: 0.80,
+                maxAngularRate: 0.11
+            },
+            'lm-descent': {
+                rotationSpeed: 0.28,
+                angularDamping: 0.965,
+                sasDamping: 0.78,
+                maxAngularRate: 0.20
+            },
+            'lm-ascent': {
+                rotationSpeed: 0.32,
+                angularDamping: 0.96,
+                sasDamping: 0.76,
+                maxAngularRate: 0.24
+            },
+            csm: {
+                rotationSpeed: 0.24,
+                angularDamping: 0.975,
+                sasDamping: 0.82,
+                maxAngularRate: 0.18
+            }
+        };
+        const profile = profiles[this.vehicleMode] || profiles.csm;
+        this.rotationControl.rotationSpeed = profile.rotationSpeed;
+        this.rotationControl.angularDamping = profile.angularDamping;
+        this.rotationControl.sasDamping = profile.sasDamping;
+        this.rotationControl.maxAngularRate = profile.maxAngularRate;
+        this.limitAngularVelocity();
     }
 
     getActiveStage() {
