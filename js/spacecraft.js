@@ -9,15 +9,25 @@ class Spacecraft {
         // Initialize physics properties
         this.position = new THREE.Vector3(0, 0, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
-        this.thrust = 500; // N (real-world value)
-        this.mass = 20000; // kg
+        this.thrust = 91189;              // N (Apollo SPS AJ10-137)
+        this.mass = 28800;                // kg (full CSM loaded mass)
+        this.dryMass = 10198;             // kg (CSM without SPS propellant)
+        this.spsPropellant = 18602;       // kg (usable SPS propellant)
+        this.spsMaxPropellant = 18602;    // kg (for percentage calc)
+        this.rcsPropellant = 374;         // kg (SM RCS, 4 quads)
+        this.rcsMaxPropellant = 374;      // kg (for percentage calc)
+        this.spsIsp = 314;                // sec (specific impulse, vacuum)
+        this.rcsIsp = 290;                // sec (estimated MMH/N2O4)
+        this.spsFlowRate = 91189 / (314 * 9.81);  // ~29.6 kg/s
+        this.rcsFlowRate = 890 / (290 * 9.81);    // ~0.31 kg/s (2 jets at 445N)
         this.direction = new THREE.Vector3(0, 0, 1); // Forward direction
 
         // Rotation control properties
         this.rotationControl = {
-            rotationSpeed: 1.8, // Angular acceleration (rad/s^2, calibrated for 60fps-equivalent feel)
-            angularDamping: 0.9995, // Normal angular velocity damping factor (per-frame at 60fps)
-            sasDamping: 0.95 // Strong damping when SAS is active (per-frame at 60fps)
+            rotationSpeed: 0.55,
+            angularDamping: 0.985,
+            sasDamping: 0.88,
+            maxAngularRate: 0.45
         };
 
         // Angular velocity (radians/second) around local axes
@@ -32,6 +42,10 @@ class Spacecraft {
 
         // Control state
         this.isThrusting = false;
+
+        // RCS translation state
+        this.rcsTranslation = new THREE.Vector3(0, 0, 0);  // current RCS thrust direction
+        this.isRCSThrusting = false;
 
         // Create and add thruster visual
         this.thrusterMesh = this.createThrusterMesh();
@@ -74,71 +88,62 @@ class Spacecraft {
             return group;
         };
 
-        // 1. Command Module (CM) - Cone
-        const cmGeometry = new THREE.ConeGeometry(1, 1.5, 8);
+        const createRing = (radius, z) => {
+            const points = [];
+            const segments = 32;
+            for (let i = 0; i <= segments; i++) {
+                const a = (i / segments) * Math.PI * 2;
+                points.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, z));
+            }
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+            return new THREE.Line(geometry, material);
+        };
+
+        // 1. Command Module (CM) - faceted cone
+        const cmGeometry = new THREE.ConeGeometry(0.92, 1.35, 12);
         const cm = createEdgedMesh(cmGeometry);
-        cm.position.z = 1.75;
+        cm.position.z = 1.72;
         cm.rotation.x = Math.PI / 2;
         spacecraftGroup.add(cm);
 
-        // 2. Service Module (SM) - Cylinder
-        const smGeometry = new THREE.CylinderGeometry(1, 1, 2, 8);
+        // 2. Service Module (SM) - faceted cylinder with simple panel rings
+        const smGeometry = new THREE.CylinderGeometry(0.95, 0.95, 2.25, 12);
         const sm = createEdgedMesh(smGeometry);
-        sm.position.z = 0;
+        sm.position.z = -0.1;
         sm.rotation.x = Math.PI / 2;
         spacecraftGroup.add(sm);
+        spacecraftGroup.add(createRing(0.96, 0.98));
+        spacecraftGroup.add(createRing(0.96, -1.18));
 
-        // 3. Engine - Cone
-        const engineGeometry = new THREE.ConeGeometry(0.8, 1.5, 8);
+        // 3. SPS engine bell
+        const engineGeometry = new THREE.ConeGeometry(0.62, 1.1, 12);
         const engine = createEdgedMesh(engineGeometry);
         engine.rotation.x = Math.PI / 2;
-        engine.position.z = -1.5;
+        engine.position.z = -1.75;
         spacecraftGroup.add(engine);
 
-        // 4. RCS thrusters as small cubes
-        const rcsGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+        // 4. RCS quads
+        const rcsGeometry = new THREE.BoxGeometry(0.22, 0.32, 0.28);
         for (let i = 0; i < 4; i++) {
             const angle = (i * Math.PI / 2) + Math.PI / 2;
             const rcs = createEdgedMesh(rcsGeometry);
-            rcs.position.x = Math.cos(angle) * 1;
-            rcs.position.y = Math.sin(angle) * 1;
-            rcs.position.z = 0;
+            rcs.position.x = Math.cos(angle) * 1.02;
+            rcs.position.y = Math.sin(angle) * 1.02;
+            rcs.position.z = -0.2;
+            rcs.rotation.z = angle;
             spacecraftGroup.add(rcs);
         }
 
+        // 5. Docking probe / nose reference
+        const probeGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.55, 8);
+        const probe = createEdgedMesh(probeGeometry);
+        probe.rotation.x = Math.PI / 2;
+        probe.position.z = 2.55;
+        spacecraftGroup.add(probe);
+
         // Forward direction (Z axis)
         this.direction = new THREE.Vector3(0, 0, 1);
-
-        // Axis helper for debugging
-        const axesHelper = new THREE.AxesHelper(4);
-        axesHelper.position.set(0, 0, 0);
-
-        // Axis labels
-        const createLabel = (text, color, position) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 32;
-            const context = canvas.getContext('2d');
-            context.fillStyle = color;
-            context.font = '24px "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace';
-            context.fillText(text, 4, 24);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({ map: texture });
-            const sprite = new THREE.Sprite(material);
-            sprite.position.copy(position);
-            sprite.scale.set(1, 0.5, 1);
-            return sprite;
-        };
-
-        const xLabel = createLabel('X', '#ff0000', new THREE.Vector3(3.5, 0, 0));
-        const yLabel = createLabel('Y', '#00ff00', new THREE.Vector3(0, 3.5, 0));
-        const zLabel = createLabel('Z', '#0000ff', new THREE.Vector3(0, 0, 3.5));
-
-        spacecraftGroup.add(axesHelper);
-        spacecraftGroup.add(xLabel);
-        spacecraftGroup.add(yLabel);
-        spacecraftGroup.add(zLabel);
 
         return spacecraftGroup;
     }
@@ -147,14 +152,14 @@ class Spacecraft {
      * Create thruster visual effects
      */
     createThrusterMesh() {
-        const thrusterGeometry = new THREE.CylinderGeometry(0.7, 0, 3, 8);
+        const thrusterGeometry = new THREE.CylinderGeometry(0.55, 0, 2.4, 12);
         const thrusterMaterial = new THREE.MeshBasicMaterial({
             color: 0xffff00,
             wireframe: true
         });
 
         const thruster = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
-        thruster.position.z = -3.75;
+        thruster.position.z = -3.25;
         thruster.rotation.x = Math.PI / 2;
         return thruster;
     }
@@ -180,6 +185,15 @@ class Spacecraft {
                 this.angularVelocity.z += angularAcceleration;
                 break;
         }
+
+        this.limitAngularVelocity();
+    }
+
+    limitAngularVelocity() {
+        const maxRate = this.rotationControl.maxAngularRate;
+        this.angularVelocity.x = THREE.MathUtils.clamp(this.angularVelocity.x, -maxRate, maxRate);
+        this.angularVelocity.y = THREE.MathUtils.clamp(this.angularVelocity.y, -maxRate, maxRate);
+        this.angularVelocity.z = THREE.MathUtils.clamp(this.angularVelocity.z, -maxRate, maxRate);
     }
 
     /**
@@ -208,6 +222,7 @@ class Spacecraft {
         this.angularVelocity.x *= frameDamping;
         this.angularVelocity.y *= frameDamping;
         this.angularVelocity.z *= frameDamping;
+        this.limitAngularVelocity();
 
         // Only update position/velocity if requested (may be handled externally by Keplerian propagation)
         if (updatePosition) {
@@ -283,5 +298,77 @@ class Spacecraft {
      */
     getSASState() {
         return this.sasActive;
+    }
+
+    /**
+     * Get current total mass (dry + remaining propellant)
+     */
+    getCurrentMass() {
+        return this.dryMass + this.spsPropellant + this.rcsPropellant;
+    }
+
+    /**
+     * Get remaining SPS delta-v using Tsiolkovsky equation
+     */
+    getDeltaV() {
+        const currentMass = this.getCurrentMass();
+        if (currentMass <= this.dryMass) return 0;
+        return this.spsIsp * 9.81 * Math.log(currentMass / this.dryMass);
+    }
+
+    /**
+     * Burn SPS propellant for a given duration. Returns actual burn time.
+     * @param {number} deltaTime - requested burn duration in seconds
+     * @returns {number} actual burn time (may be less if fuel runs out)
+     */
+    burnSPS(deltaTime) {
+        const fuelNeeded = this.spsFlowRate * deltaTime;
+        if (this.spsPropellant <= 0) {
+            this.isThrusting = false;
+            return 0;
+        }
+        if (fuelNeeded > this.spsPropellant) {
+            const actualTime = this.spsPropellant / this.spsFlowRate;
+            this.spsPropellant = 0;
+            this.isThrusting = false;
+            return actualTime;
+        }
+        this.spsPropellant -= fuelNeeded;
+        return deltaTime;
+    }
+
+    /**
+     * Burn RCS propellant for a given duration. Returns actual burn time.
+     * @param {number} deltaTime - requested burn duration in seconds
+     * @returns {number} actual burn time (may be less if fuel runs out)
+     */
+    burnRCS(deltaTime) {
+        const fuelNeeded = this.rcsFlowRate * deltaTime;
+        if (this.rcsPropellant <= 0) {
+            this.isRCSThrusting = false;
+            return 0;
+        }
+        if (fuelNeeded > this.rcsPropellant) {
+            const actualTime = this.rcsPropellant / this.rcsFlowRate;
+            this.rcsPropellant = 0;
+            this.isRCSThrusting = false;
+            return actualTime;
+        }
+        this.rcsPropellant -= fuelNeeded;
+        return deltaTime;
+    }
+
+    /**
+     * Get SPS fuel percentage remaining
+     */
+    getSPSFuelPercent() {
+        return (this.spsPropellant / this.spsMaxPropellant) * 100;
+    }
+
+    /**
+     * Get RCS fuel percentage remaining
+     */
+    getRCSFuelPercent() {
+        return (this.rcsPropellant / this.rcsMaxPropellant) * 100;
     }
 }

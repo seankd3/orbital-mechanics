@@ -29,6 +29,7 @@ class Scene {
 
         // Create a reference to the orbital trajectory
         this.orbitalTrajectory = null;
+        this.mapOverlay = null;
 
         // Setup camera controls
         this.setupControls();
@@ -50,7 +51,7 @@ class Scene {
 
         // Control state
         this.keys = {
-            space: false, // Forward thrust
+            space: false, // Forward thrust (SPS)
             w: false,     // Pitch down
             a: false,     // Yaw left
             d: false,     // Yaw right
@@ -59,21 +60,35 @@ class Scene {
             s: false,     // Pitch up
             period: false, // Increase time warp
             comma: false,  // Decrease time warp
-            t: false      // Toggle SAS
+            t: false,     // Toggle SAS
+            // RCS translation keys
+            i: false,     // Translate forward (+Z local)
+            k: false,     // Translate backward (-Z local)
+            j: false,     // Translate left (-X local)
+            l: false,     // Translate right (+X local)
+            u: false,     // Translate up (+Y local)
+            o: false      // Translate down (-Y local)
         };
 
         // Chase camera settings
         this.cameraSettings = {
-            distance: 15,
-            height: 5,
-            smoothing: 0.1,
+            distance: 10,
             zoomSpeed: 1.0,
-            minDistance: 5,
-            maxDistance: 30,
-            horizontalOrbit: 0,
-            verticalOrbit: 0,
+            minDistance: 4,
+            maxDistance: 42,
+            horizontalOrbit: -0.28,
+            verticalOrbit: 0.18,
             orbitSpeed: 0.01
         };
+
+        this.mapSettings = {
+            zoom: 16000,
+            minZoom: 9000,
+            maxZoom: 42000
+        };
+
+        // Camera reference frame mode: 'craft', 'orbit', or 'map'
+        this.cameraMode = 'craft';
 
         // Mouse state for camera control
         this.mouseState = {
@@ -87,6 +102,12 @@ class Scene {
 
         // Setup post-processing
         this.setupPostProcessing();
+
+        // Create navball attitude indicator
+        this.navball = new Navball();
+
+        // Create audio engine (initialized on first user interaction)
+        this.audio = new AudioEngine();
 
         // Setup resize handler
         this.setupResizeHandler();
@@ -114,6 +135,28 @@ class Scene {
 
         this.camera.position.set(0, 10, 20);
         this.camera.lookAt(0, 0, 0);
+
+        this.mapCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10000000);
+        this.updateMapCameraProjection();
+    }
+
+    updateMapCameraProjection() {
+        if (!this.mapCamera) return;
+
+        const viewHeight = this.getViewportHeight();
+        const aspect = window.innerWidth / viewHeight;
+        const halfHeight = this.mapSettings ? this.mapSettings.zoom / 2 : 8000;
+        const halfWidth = halfHeight * aspect;
+
+        this.mapCamera.left = -halfWidth;
+        this.mapCamera.right = halfWidth;
+        this.mapCamera.top = halfHeight;
+        this.mapCamera.bottom = -halfHeight;
+        this.mapCamera.updateProjectionMatrix();
+    }
+
+    getActiveCamera() {
+        return this.cameraMode === 'map' ? this.mapCamera : this.camera;
     }
 
     /**
@@ -128,6 +171,7 @@ class Scene {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, viewHeight);
         this.renderer.setClearColor(0x000000);
+        this.renderer.domElement.id = 'main-canvas';
         document.body.insertBefore(this.renderer.domElement, document.body.firstChild);
     }
 
@@ -139,8 +183,11 @@ class Scene {
             const viewHeight = this.getViewportHeight();
             this.camera.aspect = window.innerWidth / viewHeight;
             this.camera.updateProjectionMatrix();
+            this.updateMapCameraProjection();
             this.renderer.setSize(window.innerWidth, viewHeight);
-            this.composer.setSize(window.innerWidth, viewHeight);
+            if (this.navball) {
+                this.navball.resize();
+            }
         });
     }
 
@@ -157,14 +204,10 @@ class Scene {
     }
 
     /**
-     * Setup grid and axes helpers
+     * Setup grid and axes helpers (disabled - clean view)
      */
     setupHelpers() {
-        const gridHelper = new THREE.GridHelper(10, 10);
-        this.scene.add(gridHelper);
-
-        const axesHelper = new THREE.AxesHelper(5);
-        this.scene.add(axesHelper);
+        // Debug helpers removed for clean flight view
     }
 
     /**
@@ -177,71 +220,59 @@ class Scene {
             return;
         }
 
+        // Filter to only the brightest stars. Sparse fixed line marks are calmer
+        // on a real CRT than shader point sprites, which can shimmer at subpixel sizes.
+        const bright = [];
+        for (let i = 0; i < catalog.length; i++) {
+            if (catalog[i][2] < 3.5) bright.push(catalog[i]);
+        }
+
         const R = 5000000;
-        const count = catalog.length;
-        const positions = new Float32Array(count * 3);
-        const colors = new Float32Array(count * 3);
-        const sizes = new Float32Array(count);
+        const count = bright.length;
+        const positions = [];
 
         for (let i = 0; i < count; i++) {
-            const ra = catalog[i][0];
-            const dec = catalog[i][1];
-            const mag = catalog[i][2];
-            const bv = catalog[i][3];
+            const ra = bright[i][0];
+            const dec = bright[i][1];
+            const mag = bright[i][2];
 
-            // RA/Dec to Cartesian on sphere
             const raRad = ra * (Math.PI / 180);
             const decRad = dec * (Math.PI / 180);
-            positions[i * 3]     = R * Math.cos(decRad) * Math.cos(raRad);
-            positions[i * 3 + 1] = R * Math.sin(decRad);
-            positions[i * 3 + 2] = -R * Math.cos(decRad) * Math.sin(raRad);
+            const dir = new THREE.Vector3(
+                Math.cos(decRad) * Math.cos(raRad),
+                Math.sin(decRad),
+                -Math.cos(decRad) * Math.sin(raRad)
+            ).normalize();
 
-            // B-V color index to RGB
-            const rgb = this.bvToRGB(bv);
-            colors[i * 3]     = rgb[0];
-            colors[i * 3 + 1] = rgb[1];
-            colors[i * 3 + 2] = rgb[2];
+            const tangent = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
+            if (tangent.lengthSq() < 0.0001) {
+                tangent.crossVectors(dir, new THREE.Vector3(1, 0, 0));
+            }
+            tangent.normalize();
 
-            // Magnitude to point size (logarithmic — brighter = larger)
-            // Sirius (-1.44) -> ~8, mag 0 -> ~5, mag 3 -> ~2, mag 6.5 -> ~0.5
-            const brightness = Math.pow(10, -0.4 * (mag - 0));
-            sizes[i] = Math.max(0.4, Math.min(8.0, brightness * 5.0));
+            const center = dir.clone().multiplyScalar(R);
+            const halfLength = mag < 1.0 ? 1800 : 950;
+            const a = center.clone().addScaledVector(tangent, -halfLength);
+            const b = center.clone().addScaledVector(tangent, halfLength);
+            positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
         }
 
         const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
 
-        const material = new THREE.ShaderMaterial({
-            uniforms: {},
-            vertexShader: `
-                attribute float size;
-                varying vec3 vColor;
-                void main() {
-                    vColor = color;
-                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                    gl_PointSize = size * (300.0 / -mvPosition.z);
-                    gl_PointSize = max(gl_PointSize, 0.5);
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                varying vec3 vColor;
-                void main() {
-                    float dist = length(gl_PointCoord - vec2(0.5));
-                    if (dist > 0.5) discard;
-                    float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-                    gl_FragColor = vec4(vColor, alpha);
-                }
-            `,
-            vertexColors: true,
+        const material = new THREE.LineBasicMaterial({
+            color: 0xffffff,
             transparent: true,
-            depthWrite: false
+            opacity: 0.85,
+            depthWrite: false,
+            depthTest: false
         });
 
-        const stars = new THREE.Points(geometry, material);
-        this.scene.add(stars);
+        // Stars go in their own scene so they never interact with the main depth buffer.
+        // Rendered first each frame, then depth is cleared before the main scene.
+        this.starScene = new THREE.Scene();
+        const stars = new THREE.LineSegments(geometry, material);
+        this.starScene.add(stars);
     }
 
     /**
@@ -331,11 +362,20 @@ class Scene {
         });
 
         document.addEventListener('wheel', (event) => {
-            this.cameraSettings.distance += event.deltaY * 0.01 * this.cameraSettings.zoomSpeed;
-            this.cameraSettings.distance = Math.max(
-                this.cameraSettings.minDistance,
-                Math.min(this.cameraSettings.maxDistance, this.cameraSettings.distance)
-            );
+            if (this.cameraMode === 'map') {
+                this.mapSettings.zoom += event.deltaY * 8;
+                this.mapSettings.zoom = Math.max(
+                    this.mapSettings.minZoom,
+                    Math.min(this.mapSettings.maxZoom, this.mapSettings.zoom)
+                );
+                this.updateMapCameraProjection();
+            } else {
+                this.cameraSettings.distance += event.deltaY * 0.01 * this.cameraSettings.zoomSpeed;
+                this.cameraSettings.distance = Math.max(
+                    this.cameraSettings.minDistance,
+                    Math.min(this.cameraSettings.maxDistance, this.cameraSettings.distance)
+                );
+            }
             event.preventDefault();
         }, { passive: false });
 
@@ -364,6 +404,11 @@ class Scene {
      * Handle key down events
      */
     handleKeyDown(event) {
+        // Initialize audio on first user interaction (browser autoplay policy)
+        if (this.audio && !this.audio.initialized) {
+            this.audio.init();
+        }
+
         switch (event.key) {
             case ' ':
                 this.keys.space = true;
@@ -397,6 +442,31 @@ class Scene {
                     this.spacecraft.toggleSAS();
                 }
                 break;
+            case 'c':
+                this.cameraMode = this.cameraMode === 'craft' ? 'orbit' : 'craft';
+                break;
+            case 'm':
+                this.cameraMode = this.cameraMode === 'map' ? 'craft' : 'map';
+                break;
+            // RCS translation keys
+            case 'i':
+                this.keys.i = true;
+                break;
+            case 'k':
+                this.keys.k = true;
+                break;
+            case 'j':
+                this.keys.j = true;
+                break;
+            case 'l':
+                this.keys.l = true;
+                break;
+            case 'u':
+                this.keys.u = true;
+                break;
+            case 'o':
+                this.keys.o = true;
+                break;
         }
     }
 
@@ -426,6 +496,25 @@ class Scene {
             case 'e':
                 this.keys.e = false;
                 break;
+            // RCS translation keys
+            case 'i':
+                this.keys.i = false;
+                break;
+            case 'k':
+                this.keys.k = false;
+                break;
+            case 'j':
+                this.keys.j = false;
+                break;
+            case 'l':
+                this.keys.l = false;
+                break;
+            case 'u':
+                this.keys.u = false;
+                break;
+            case 'o':
+                this.keys.o = false;
+                break;
         }
     }
 
@@ -446,6 +535,29 @@ class Scene {
     addPlanet(planet) {
         this.planet = planet;
         this.scene.add(planet.mesh);
+        this.createMapOverlay();
+    }
+
+    createMapOverlay() {
+        if (this.mapOverlay) {
+            this.scene.remove(this.mapOverlay);
+            this.mapOverlay.geometry.dispose();
+            this.mapOverlay.material.dispose();
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(18), 3));
+        const material = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.95,
+            depthTest: false,
+            depthWrite: false
+        });
+
+        this.mapOverlay = new THREE.LineSegments(geometry, material);
+        this.mapOverlay.visible = false;
+        this.scene.add(this.mapOverlay);
     }
 
     /**
@@ -475,9 +587,34 @@ class Scene {
 
         // Update the orbital trajectory
         this.updateOrbitalTrajectory();
+        this.updateMapOverlay();
 
-        // Render the scene
-        this.composer.render();
+        // Update navball
+        if (this.navball && this.spacecraft && this.planet) {
+            this.navball.update(this.spacecraft, this.planet);
+        }
+
+        // Update audio engine
+        if (this.audio && this.spacecraft) {
+            this.audio.update(this.spacecraft);
+        }
+
+        // Render stars first in their own scene (no depth interaction with main scene)
+        this.renderer.autoClear = true;
+        const activeCamera = this.getActiveCamera();
+        if (this.starScene) {
+            this.renderer.render(this.starScene, activeCamera);
+            // Clear only depth so main scene renders on top of star background
+            this.renderer.autoClear = false;
+            this.renderer.clearDepth();
+        }
+        this.renderer.render(this.scene, activeCamera);
+        this.renderer.autoClear = true;
+
+        // Render navball overlay (dedicated canvas/renderer, no viewport restore needed)
+        if (this.navball) {
+            this.navball.render();
+        }
     }
 
     /**
@@ -500,6 +637,9 @@ class Scene {
             const scaleManager = window.scaleManager;
             if (!scaleManager) return;
 
+            // Current mass accounts for fuel depletion
+            const currentMass = this.spacecraft.getCurrentMass();
+
             // Check for collision with planet
             const collision = physics.handlePlanetCollision(
                 this.spacecraft.position,
@@ -511,13 +651,12 @@ class Scene {
             if (collision) {
                 this.spacecraft.setPosition(collision.position);
                 this.spacecraft.setVelocity(collision.velocity);
-                // Still update rotation/visuals even during collision
                 this.spacecraft.update(warpedDeltaTime, false);
                 return;
             }
 
-            // When in time warp and not thrusting, use Keplerian propagation (on rails)
-            if (this.timeWarp.factor > 1 && !this.spacecraft.isThrusting) {
+            // When in time warp and not thrusting/translating, use Keplerian propagation (on rails)
+            if (this.timeWarp.factor > 1 && !this.spacecraft.isThrusting && !this.spacecraft.isRCSThrusting) {
                 const orbitalParameters = this.calculateOrbitalParameters();
 
                 if (orbitalParameters && orbitalParameters.eccentricity < 1.0) {
@@ -541,30 +680,48 @@ class Scene {
             }
 
             // Numerical integration with substeps when thrusting during time warp
-            if (this.spacecraft.isThrusting && this.timeWarp.factor > 1) {
+            if ((this.spacecraft.isThrusting || this.spacecraft.isRCSThrusting) && this.timeWarp.factor > 1) {
                 const numSteps = Math.min(10, Math.ceil(this.timeWarp.factor));
                 const stepDeltaTime = warpedDeltaTime / numSteps;
 
                 for (let i = 0; i < numSteps; i++) {
-                    // Apply thrust in every substep (properly scaled with time warp)
-                    if (this.spacecraft.isThrusting) {
-                        const forwardVector = new THREE.Vector3(0, 0, 1);
-                        forwardVector.applyQuaternion(this.spacecraft.mesh.quaternion);
-                        const visualThrust = scaleManager.forceToVisualizationSpace(this.spacecraft.thrust);
-                        const thrustAcceleration = forwardVector.multiplyScalar(visualThrust / this.spacecraft.mass);
-                        this.spacecraft.velocity.add(thrustAcceleration.clone().multiplyScalar(stepDeltaTime));
+                    const stepMass = this.spacecraft.getCurrentMass();
+
+                    // SPS thrust with fuel consumption
+                    if (this.spacecraft.isThrusting && this.spacecraft.spsPropellant > 0) {
+                        const actualBurnTime = this.spacecraft.burnSPS(stepDeltaTime);
+                        if (actualBurnTime > 0) {
+                            const forwardVector = new THREE.Vector3(0, 0, 1);
+                            forwardVector.applyQuaternion(this.spacecraft.mesh.quaternion);
+                            const visualThrust = scaleManager.forceToVisualizationSpace(this.spacecraft.thrust);
+                            const thrustAcceleration = forwardVector.multiplyScalar(visualThrust / stepMass);
+                            this.spacecraft.velocity.add(thrustAcceleration.clone().multiplyScalar(actualBurnTime));
+                        }
                     }
 
-                    // Calculate gravitational force for this substep
+                    // RCS translation with fuel consumption
+                    if (this.spacecraft.isRCSThrusting && this.spacecraft.rcsPropellant > 0) {
+                        const rcsActualTime = this.spacecraft.burnRCS(stepDeltaTime);
+                        if (rcsActualTime > 0) {
+                            const rcsWorldDir = this.spacecraft.rcsTranslation.clone()
+                                .applyQuaternion(this.spacecraft.mesh.quaternion);
+                            const rcsThrust = 890; // 2 jets x 445N
+                            const visualRcsThrust = scaleManager.forceToVisualizationSpace(rcsThrust);
+                            const rcsAccel = rcsWorldDir.multiplyScalar(visualRcsThrust / stepMass);
+                            this.spacecraft.velocity.add(rcsAccel.clone().multiplyScalar(rcsActualTime));
+                        }
+                    }
+
+                    // Gravitational force
                     const realForce = physics.calculateGravitationalForce(
-                        this.spacecraft.mass,
+                        stepMass,
                         this.planet.mass,
                         scaleManager.vectorToRealWorld(this.spacecraft.position),
                         scaleManager.vectorToRealWorld(this.planet.mesh.position)
                     );
 
                     const visualForce = scaleManager.vectorToVisualizationSpace(realForce);
-                    const acceleration = visualForce.divideScalar(this.spacecraft.mass);
+                    const acceleration = visualForce.divideScalar(stepMass);
                     this.spacecraft.velocity.add(acceleration.multiplyScalar(stepDeltaTime));
 
                     // Update position for this substep
@@ -578,24 +735,42 @@ class Scene {
             }
 
             // Standard physics path: apply thrust + gravity with single-step integration
-            if (this.spacecraft.isThrusting) {
-                const forwardVector = new THREE.Vector3(0, 0, 1);
-                forwardVector.applyQuaternion(this.spacecraft.mesh.quaternion);
-                const visualThrust = scaleManager.forceToVisualizationSpace(this.spacecraft.thrust);
-                const thrustAcceleration = forwardVector.multiplyScalar(visualThrust / this.spacecraft.mass);
-                this.spacecraft.velocity.add(thrustAcceleration.multiplyScalar(warpedDeltaTime));
+
+            // SPS thrust with fuel consumption
+            if (this.spacecraft.isThrusting && this.spacecraft.spsPropellant > 0) {
+                const actualBurnTime = this.spacecraft.burnSPS(warpedDeltaTime);
+                if (actualBurnTime > 0) {
+                    const forwardVector = new THREE.Vector3(0, 0, 1);
+                    forwardVector.applyQuaternion(this.spacecraft.mesh.quaternion);
+                    const visualThrust = scaleManager.forceToVisualizationSpace(this.spacecraft.thrust);
+                    const thrustAcceleration = forwardVector.multiplyScalar(visualThrust / currentMass);
+                    this.spacecraft.velocity.add(thrustAcceleration.multiplyScalar(actualBurnTime));
+                }
+            }
+
+            // RCS translation with fuel consumption
+            if (this.spacecraft.isRCSThrusting && this.spacecraft.rcsPropellant > 0) {
+                const rcsActualTime = this.spacecraft.burnRCS(warpedDeltaTime);
+                if (rcsActualTime > 0) {
+                    const rcsWorldDir = this.spacecraft.rcsTranslation.clone()
+                        .applyQuaternion(this.spacecraft.mesh.quaternion);
+                    const rcsThrust = 890; // 2 jets x 445N
+                    const visualRcsThrust = scaleManager.forceToVisualizationSpace(rcsThrust);
+                    const rcsAccel = rcsWorldDir.multiplyScalar(visualRcsThrust / currentMass);
+                    this.spacecraft.velocity.add(rcsAccel.multiplyScalar(rcsActualTime));
+                }
             }
 
             // Calculate gravitational force in real-world units
             const realForce = physics.calculateGravitationalForce(
-                this.spacecraft.mass,
+                currentMass,
                 this.planet.mass,
                 scaleManager.vectorToRealWorld(this.spacecraft.position),
                 scaleManager.vectorToRealWorld(this.planet.mesh.position)
             );
 
             const visualForce = scaleManager.vectorToVisualizationSpace(realForce);
-            const acceleration = visualForce.divideScalar(this.spacecraft.mass);
+            const acceleration = visualForce.divideScalar(currentMass);
             this.spacecraft.velocity.add(acceleration.multiplyScalar(warpedDeltaTime));
         }
 
@@ -609,8 +784,8 @@ class Scene {
     processInput(deltaTime) {
         if (!this.spacecraft) return;
 
-        // Forward thrust with spacebar
-        if (this.keys.space) {
+        // Forward thrust with spacebar (SPS engine)
+        if (this.keys.space && this.spacecraft.spsPropellant > 0) {
             this.spacecraft.setThrust(true);
         } else {
             this.spacecraft.setThrust(false);
@@ -623,6 +798,26 @@ class Scene {
         if (this.keys.d) this.spacecraft.rotate('yaw', -1, deltaTime);
         if (this.keys.q) this.spacecraft.rotate('roll', -1, deltaTime);
         if (this.keys.e) this.spacecraft.rotate('roll', 1, deltaTime);
+
+        // RCS translation (IJKL + UO)
+        const rcsDir = new THREE.Vector3(0, 0, 0);
+        if (this.keys.i) rcsDir.z += 1;  // forward
+        if (this.keys.k) rcsDir.z -= 1;  // backward
+        if (this.keys.j) rcsDir.x -= 1;  // left
+        if (this.keys.l) rcsDir.x += 1;  // right
+        if (this.keys.u) rcsDir.y += 1;  // up
+        if (this.keys.o) rcsDir.y -= 1;  // down
+
+        if (rcsDir.lengthSq() > 0 && this.spacecraft.rcsPropellant > 0) {
+            rcsDir.normalize();
+            this.spacecraft.rcsTranslation.copy(rcsDir);
+            this.spacecraft.isRCSThrusting = true;
+            // Fire RCS audio pop
+            if (this.audio) this.audio.fireRCS();
+        } else {
+            this.spacecraft.rcsTranslation.set(0, 0, 0);
+            this.spacecraft.isRCSThrusting = false;
+        }
     }
 
     /**
@@ -634,28 +829,77 @@ class Scene {
 
         const spacecraftPos = this.spacecraft.position.clone();
 
-        // Start with the base offset behind the spacecraft
-        const baseOffset = new THREE.Vector3(0, this.cameraSettings.height, -this.cameraSettings.distance);
+        if (this.cameraMode === 'map') {
+            if (this.planet) {
+                const relPosition = spacecraftPos.clone().sub(this.planet.mesh.position);
+                const velocity = this.spacecraft.velocity.clone();
+                let normal = new THREE.Vector3().crossVectors(relPosition, velocity);
+                if (normal.lengthSq() < 1e-10) normal.set(0, 1, 0);
+                normal.normalize();
 
-        // Apply orbit rotations to the offset
-        baseOffset.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.cameraSettings.verticalOrbit);
-        baseOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraSettings.horizontalOrbit);
+                let radial = relPosition.clone();
+                if (radial.lengthSq() < 1e-10) radial.set(0, 1, 0);
+                radial.normalize();
 
-        // Apply the spacecraft's rotation to the orbited offset
-        const worldOffset = baseOffset.clone().applyQuaternion(this.spacecraft.mesh.quaternion);
+                this.mapCamera.position.copy(this.planet.mesh.position).addScaledVector(normal, 1000000);
+                this.mapCamera.up.copy(radial);
+                this.mapCamera.lookAt(this.planet.mesh.position);
+            }
+            return;
+        }
 
-        // Calculate final camera position
-        const cameraPosition = spacecraftPos.clone().add(worldOffset);
+        if (this.cameraMode === 'craft') {
+            // Craft-locked: camera offset is in spacecraft local space
+            const baseOffset = new THREE.Vector3(0, 0, -this.cameraSettings.distance);
+            baseOffset.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.cameraSettings.verticalOrbit);
+            baseOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraSettings.horizontalOrbit);
 
-        // Set camera position directly
-        this.camera.position.copy(cameraPosition);
+            const worldOffset = baseOffset.clone().applyQuaternion(this.spacecraft.mesh.quaternion);
+            this.camera.position.copy(spacecraftPos).add(worldOffset);
 
-        // Apply the spacecraft's rotation to the camera's up vector for proper roll
-        const localUpVector = new THREE.Vector3(0, 1, 0);
-        const worldUpVector = localUpVector.clone().applyQuaternion(this.spacecraft.mesh.quaternion);
-        this.camera.up.copy(worldUpVector);
+            const localUp = new THREE.Vector3(0, 1, 0);
+            this.camera.up.copy(localUp.applyQuaternion(this.spacecraft.mesh.quaternion));
+        } else {
+            // Orbit mode: build camera offset relative to radial-up frame
+            // so mouse drag orbits naturally around the planet's radial axis
+            if (this.planet) {
+                const radialUp = spacecraftPos.clone().sub(this.planet.mesh.position).normalize();
 
-        // Look at the spacecraft
+                // Build a local frame: radialUp is Y, derive X and Z from velocity or fallback
+                var forward = this.spacecraft.velocity.clone();
+                if (forward.lengthSq() < 1e-10) forward.set(0, 0, 1);
+                // Remove the radial component to get a tangent direction
+                forward.sub(radialUp.clone().multiplyScalar(forward.dot(radialUp))).normalize();
+                if (forward.lengthSq() < 1e-10) {
+                    // Velocity is purely radial, pick an arbitrary tangent
+                    forward.set(1, 0, 0);
+                    forward.sub(radialUp.clone().multiplyScalar(forward.dot(radialUp))).normalize();
+                }
+                var right = new THREE.Vector3().crossVectors(forward, radialUp).normalize();
+
+                // Build offset in this local frame using orbit angles
+                // Negate horizontal to match drag direction (frame handedness differs from craft mode)
+                var baseOffset = new THREE.Vector3(0, 0, -this.cameraSettings.distance);
+                baseOffset.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.cameraSettings.verticalOrbit);
+                baseOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -this.cameraSettings.horizontalOrbit);
+
+                // Transform from local frame to world: x->right, y->radialUp, z->forward
+                var worldOffset = new THREE.Vector3();
+                worldOffset.addScaledVector(right, baseOffset.x);
+                worldOffset.addScaledVector(radialUp, baseOffset.y);
+                worldOffset.addScaledVector(forward, baseOffset.z);
+
+                this.camera.position.copy(spacecraftPos).add(worldOffset);
+                this.camera.up.copy(radialUp);
+            } else {
+                var baseOffset2 = new THREE.Vector3(0, 0, -this.cameraSettings.distance);
+                baseOffset2.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.cameraSettings.verticalOrbit);
+                baseOffset2.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraSettings.horizontalOrbit);
+                this.camera.position.copy(spacecraftPos).add(baseOffset2);
+                this.camera.up.set(0, 1, 0);
+            }
+        }
+
         this.camera.lookAt(spacecraftPos);
     }
 
@@ -772,6 +1016,30 @@ class Scene {
                 sasStatus.textContent = this.spacecraft.getSASState() ? 'ON' : 'OFF';
             }
         }
+
+        // Update camera mode display
+        const cameraModeDisplay = document.getElementById('camera-mode');
+        if (cameraModeDisplay) {
+            cameraModeDisplay.textContent = this.cameraMode.toUpperCase();
+        }
+
+        // Update fuel displays
+        if (this.spacecraft) {
+            const fuelDisplay = document.getElementById('fuel-percent');
+            if (fuelDisplay) {
+                fuelDisplay.textContent = this.spacecraft.getSPSFuelPercent().toFixed(1);
+            }
+
+            const dvDisplay = document.getElementById('delta-v');
+            if (dvDisplay) {
+                dvDisplay.textContent = this.spacecraft.getDeltaV().toFixed(0);
+            }
+
+            const rcsFuelDisplay = document.getElementById('rcs-fuel');
+            if (rcsFuelDisplay) {
+                rcsFuelDisplay.textContent = this.spacecraft.getRCSFuelPercent().toFixed(1);
+            }
+        }
     }
 
     /**
@@ -817,17 +1085,56 @@ class Scene {
         const points = this.calculateOrbitPoints(semiMajorAxis, eccentricity, orbit);
         if (points.length === 0) return;
 
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const segmentPoints = this.buildVisibleOrbitSegments(points);
+        if (segmentPoints.length === 0) return;
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(segmentPoints);
 
         const material = new THREE.LineBasicMaterial({
-            color: 0x00ffff,
-            opacity: 0.7,
+            color: 0x00a8d8,
+            opacity: 0.85,
             transparent: true,
             linewidth: 1
         });
 
-        this.orbitalTrajectory = new THREE.Line(geometry, material);
+        this.orbitalTrajectory = new THREE.LineSegments(geometry, material);
         this.scene.add(this.orbitalTrajectory);
+    }
+
+    buildVisibleOrbitSegments(points) {
+        if (this.cameraMode === 'map' || !this.planet) {
+            const allSegments = [];
+            for (let i = 0; i < points.length - 1; i++) {
+                allSegments.push(points[i], points[i + 1]);
+            }
+            return allSegments;
+        }
+
+        const camera = this.getActiveCamera();
+        const visible = [];
+        for (let i = 0; i < points.length - 1; i++) {
+            const mid = points[i].clone().add(points[i + 1]).multiplyScalar(0.5);
+            if (!this.isPointBehindPlanet(mid, camera)) {
+                visible.push(points[i], points[i + 1]);
+            }
+        }
+        return visible;
+    }
+
+    isPointBehindPlanet(point, camera) {
+        const planetCenter = this.planet.mesh.position;
+        const cameraToPoint = point.clone().sub(camera.position);
+        const cameraToPlanet = planetCenter.clone().sub(camera.position);
+        const distanceToPoint = cameraToPoint.length();
+        if (distanceToPoint <= 0.0001) return false;
+
+        const direction = cameraToPoint.clone().divideScalar(distanceToPoint);
+        const projection = cameraToPlanet.dot(direction);
+        if (projection <= 0 || projection >= distanceToPoint) return false;
+
+        const closest = camera.position.clone().addScaledVector(direction, projection);
+        const missDistance = closest.distanceTo(planetCenter);
+        return missDistance < this.planet.radius * 1.002;
     }
 
     /**
@@ -844,7 +1151,7 @@ class Scene {
         const semiMinorAxis = semiMajorAxis * Math.sqrt(1 - eccentricity * eccentricity);
         const focalDistance = semiMajorAxis * eccentricity;
 
-        const numPoints = 200;
+        const numPoints = 720;
         const points = [];
 
         // Get real-world position and velocity for orbital orientation
@@ -898,6 +1205,40 @@ class Scene {
         }
     }
 
+    updateMapOverlay() {
+        if (!this.mapOverlay || !this.spacecraft || !this.planet) return;
+
+        this.mapOverlay.visible = this.cameraMode === 'map';
+        if (!this.mapOverlay.visible) return;
+
+        const relPosition = this.spacecraft.position.clone().sub(this.planet.mesh.position);
+        const velocity = this.spacecraft.velocity.clone();
+        if (relPosition.lengthSq() < 1e-10 || velocity.lengthSq() < 1e-10) return;
+
+        const tangent = velocity.normalize();
+        const normal = new THREE.Vector3().crossVectors(relPosition, tangent).normalize();
+        const radial = new THREE.Vector3().crossVectors(tangent, normal).normalize();
+        const pos = this.spacecraft.position.clone();
+        const markerSize = 145;
+        const velocityLength = 850;
+
+        const points = [
+            pos.clone().addScaledVector(tangent, -markerSize),
+            pos.clone().addScaledVector(tangent, markerSize),
+            pos.clone().addScaledVector(radial, -markerSize),
+            pos.clone().addScaledVector(radial, markerSize),
+            pos.clone(),
+            pos.clone().addScaledVector(tangent, velocityLength)
+        ];
+
+        const attribute = this.mapOverlay.geometry.attributes.position;
+        for (let i = 0; i < points.length; i++) {
+            attribute.setXYZ(i, points[i].x, points[i].y, points[i].z);
+        }
+        attribute.needsUpdate = true;
+        this.mapOverlay.geometry.computeBoundingSphere();
+    }
+
     /**
      * Increase the time warp factor to the next level
      */
@@ -921,13 +1262,11 @@ class Scene {
     }
 
     /**
-     * Setup post-processing
+     * Setup post-processing (currently direct render - no bloom per design)
      */
     setupPostProcessing() {
-        this.composer = new THREE.EffectComposer(this.renderer);
-
-        const renderPass = new THREE.RenderPass(this.scene, this.camera);
-        renderPass.renderToScreen = true;
-        this.composer.addPass(renderPass);
+        // No EffectComposer needed without bloom.
+        // Direct renderer.render() avoids viewport state issues
+        // that the composer's internal render targets can cause.
     }
 }

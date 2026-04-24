@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spacecraft Simulator</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=mocr5">
 </head>
 <body>
     <div id="bottom-bar">
@@ -29,6 +29,21 @@
             <div class="info-row">
                 <span class="var-name">SAS</span>
                 <span class="data-value" id="sas-status">OFF</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">FUL</span>
+                <span class="data-value" id="fuel-percent">100.0</span>
+                <span class="data-unit">%</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">DV</span>
+                <span class="data-value" id="delta-v">0</span>
+                <span class="data-unit">m/s</span>
+            </div>
+            <div class="info-row">
+                <span class="var-name">RCS</span>
+                <span class="data-value" id="rcs-fuel">100.0</span>
+                <span class="data-unit">%</span>
             </div>
         </div>
 
@@ -66,7 +81,7 @@
 
         <div class="bar-column">
             <div class="section-header">[ ATTITUDE ]</div>
-            <div class="info-row">
+            <div class="info-row wide">
                 <span class="var-name">ORI</span>
                 <span class="data-value" id="orientation">P: 0.0° Y: 0.0° R: 0.0°</span>
             </div>
@@ -74,28 +89,25 @@
                 <span class="var-name">WRP</span>
                 <span class="data-value" id="time-warp">1x</span>
             </div>
+            <div class="info-row">
+                <span class="var-name">CAM</span>
+                <span class="data-value" id="camera-mode">CRAFT</span>
+            </div>
         </div>
     </div>
 
     <!-- Import Three.js core -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 
-    <!-- Post-processing dependencies (must load after Three.js core) -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/CopyShader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/LuminosityHighPassShader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/Pass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/ShaderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/EffectComposer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/RenderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/UnrealBloomPass.js"></script>
-
     <!-- Import application scripts -->
-    <script src="js/scaleManager.js"></script>
-    <script src="js/physics.js"></script>
-    <script src="js/planet.js"></script>
-    <script src="js/spacecraft.js"></script>
-    <script src="js/starCatalog.js"></script>
-    <script src="js/scene.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/scaleManager.js?v=mocr5"></script>
+    <script src="js/physics.js?v=mocr5"></script>
+    <script src="js/planet.js?v=mocr5"></script>
+    <script src="js/spacecraft.js?v=mocr5"></script>
+    <script src="js/starCatalog.js?v=mocr5"></script>
+    <script src="js/navball.js?v=mocr5"></script>
+    <script src="js/audio.js?v=mocr5"></script>
+    <script src="js/scene.js?v=mocr5"></script>
+    <script src="js/main.js?v=mocr5"></script>
 </body>
 </html>
