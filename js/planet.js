@@ -147,51 +147,6 @@ class Planet {
         }
     }
 
-    /**
-     * Create an atmosphere glow effect using a Fresnel shader
-     */
-    createAtmosphere() {
-        const atmosphereGeometry = new THREE.IcosahedronGeometry(this.radius * 1.03, 16);
-
-        const vertexShader = `
-            varying vec3 vNormal;
-            varying vec3 vPosition;
-
-            void main() {
-                vNormal = normalize(normalMatrix * normal);
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                vPosition = worldPosition.xyz;
-                gl_Position = projectionMatrix * viewMatrix * worldPosition;
-            }
-        `;
-
-        const fragmentShader = `
-            uniform vec3 viewVector;
-            varying vec3 vNormal;
-            varying vec3 vPosition;
-
-            void main() {
-                vec3 eyeDir = normalize(viewVector - vPosition);
-                float rimFactor = pow(1.0 - abs(dot(vNormal, eyeDir)), 3.0);
-                gl_FragColor = vec4(0.12, 0.49, 0.85, rimFactor);
-            }
-        `;
-
-        this.atmosphereMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                viewVector: { value: new THREE.Vector3() }
-            },
-            vertexShader: vertexShader,
-            fragmentShader: fragmentShader,
-            side: THREE.BackSide,
-            blending: THREE.AdditiveBlending,
-            transparent: true,
-            depthWrite: false
-        });
-
-        const atmosphereMesh = new THREE.Mesh(atmosphereGeometry, this.atmosphereMaterial);
-        this.mesh.add(atmosphereMesh);
-    }
 
     /**
      * Calculate gravitational force on an object
