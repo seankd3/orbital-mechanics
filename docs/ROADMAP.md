@@ -6,7 +6,7 @@ Apollo CSM Orbital Mechanics Simulator
 
 ## Vision
 
-An authentic Apollo-era orbital mechanics simulator with the soul of a flight sim and the clarity of a teaching tool. Piloted through a real DSKY interface, rendered in CRT vector graphics, progressing from Earth orbit through lunar transfer to full Apollo mission profiles.
+An authentic Apollo-era orbital mechanics simulator with the soul of a flight sim and the clarity of a teaching tool. Piloted through a real DSKY interface, rendered as clean mission-control vector graphics for a real CRT display, progressing from Earth orbit through lunar transfer to full Apollo mission profiles.
 
 The kind of thing that makes you understand *why* orbital mechanics works the way it does -- not by reading about it, but by getting it wrong five times and then nailing the burn.
 
@@ -18,7 +18,7 @@ The kind of thing that makes you understand *why* orbital mechanics works the wa
 
 3. **Teach through failure.** The best orbital mechanics education is a bad burn that costs too much fuel. Finite resources, visible consequences, and enough information to understand what went wrong.
 
-4. **CRT vector aesthetic is the identity.** Everything -- navball, DSKY, map view, maneuver nodes -- should look like it's drawn on a phosphor display. Wireframes, bloom, monospace, amber-on-black.
+4. **Clean mission-control vector aesthetic is the identity.** Everything -- navball, DSKY, map view, maneuver nodes -- should use crisp monochrome lines, boxed data formats, and readable flight-controller telemetry. No simulated bloom, scanlines, or fake CRT treatment; the target display is already a CRT.
 
 ### What Exists Today (v1.7)
 
@@ -26,20 +26,21 @@ The kind of thing that makes you understand *why* orbital mechanics works the wa
 - Apollo CSM wireframe model with 6-DOF rotation
 - SAS (Stability Augmentation System) with rate damping
 - Orbital trajectory visualization (cyan ellipse)
-- Bottom-bar telemetry HUD (vehicle, orbit, attitude)
+- Bottom-bar MOCR-style telemetry HUD (vehicle, orbit, attitude)
+- 2D vector navball with prograde, retrograde, normal, radial, and horizon references
+- Apollo SPS/RCS propellant, delta-v readout, and RCS translation
+- Procedural SPS/RCS audio cues
+- Earth latitude/longitude grid and coastline outlines
+- Orthographic map view with spacecraft marker and velocity vector
 - Time warp (1x - 1000x) with automatic physics mode switching
 - Chase camera with mouse orbit/zoom
-- Post-processing bloom for CRT glow
 - ISS-like 400km starting orbit with correct orbital velocity
 
 ### What's Missing
 
-- No finite fuel (infinite thrust)
 - No maneuver planning (fly by feel only)
-- No navball (raw Euler angles for orientation)
 - No DSKY (no Apollo computer interface)
 - No Moon (single-body gravity only)
-- No sound
 - No rendezvous targets
 - No mission structure
 
@@ -53,7 +54,7 @@ Right now you can orbit and thrust, but there's no *feel*. This phase is about t
 
 ### 1a. Navball (Attitude Indicator)
 
-A vector-drawn attitude indicator on the 3D HUD, rendered as a wireframe hemisphere to match the CRT aesthetic.
+A vector-drawn attitude indicator on the 2D HUD, rendered as clean line art to match the mission-control display aesthetic.
 
 **Markers:**
 - Prograde / retrograde (velocity direction relative to orbit)
@@ -62,7 +63,7 @@ A vector-drawn attitude indicator on the 3D HUD, rendered as a wireframe hemisph
 - Horizon line relative to the planet surface
 
 **Implementation notes:**
-- Render as a second Three.js scene in a viewport overlay (avoids depth conflicts with main scene)
+- Render as a dedicated 2D canvas overlay so line weight stays stable
 - Compute prograde from `spacecraft.velocity.normalize()`
 - Compute normal from `cross(position, velocity).normalize()`
 - Radial from `cross(velocity, normal).normalize()`
@@ -141,10 +142,9 @@ Web Audio API, no external dependencies.
 ### 1e. Visual Polish
 
 - Remove debug grid helper and axes helpers from the scene (and from the spacecraft model)
-- Add continent coastline outlines to Earth wireframe (GeoJSON coastline data, projected to sphere, rendered as additional LineSegments)
-- Thin atmosphere glow ring on Earth's limb (subtle blue-white line at the edge, maybe a torus geometry with low opacity)
+- Keep continent coastline outlines on Earth wireframe (GeoJSON coastline data, projected to sphere, rendered as additional LineSegments)
+- Keep Earth limb and orbit lines crisp; avoid glow effects
 - Proper Earth rotation so ground track is meaningful at time warp
-- Re-enable the UnrealBloomPass (currently set up but only using RenderPass)
 
 ### Phase 1 "Done" Criteria
 
@@ -216,7 +216,7 @@ Toggle with M key. Switches to a top-down orthographic camera looking along the 
 - Zoom in/out with scroll wheel
 - Pan with mouse drag
 
-**Style:** Same CRT wireframe aesthetic. Grid lines at altitude intervals (100km, 500km, 1000km). Dark background, vector lines, bloom glow.
+**Style:** Same clean vector aesthetic. Grid lines at altitude intervals (100km, 500km, 1000km). Dark background, crisp monochrome/vector lines, no synthetic CRT effects.
 
 **Why map view matters:** The 3D chase camera is great for immersion but terrible for understanding orbital geometry. Map view is where planning happens.
 
@@ -265,7 +265,7 @@ Render as an overlay panel, toggled with G key.
 - Keyboard shortcut mapping: V for VERB, N for NOUN, Enter for ENTR, number keys for digits
 - Input buffer with echo (shows digits as you type before ENTR)
 
-**Visual style:** Render with HTML/CSS overlay, not Three.js. Green electroluminescent segments on dark panel. Same Courier New font. Subtle bloom around active segments.
+**Visual style:** Render with HTML/CSS overlay, not Three.js. Green electroluminescent-style segments on dark panel. Same Courier New font. Keep active segments crisp for the physical CRT.
 
 ### 3b. AGC State Machine
 
