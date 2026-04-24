@@ -1,4 +1,17 @@
 /**
+ * Convert latitude/longitude (degrees) to a THREE.Vector3 on a sphere surface
+ */
+function latLonToVector3(lat, lon, radius) {
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+    return new THREE.Vector3(
+        radius * Math.cos(latRad) * Math.cos(lonRad),
+        radius * Math.sin(latRad),
+        -radius * Math.cos(latRad) * Math.sin(lonRad)
+    );
+}
+
+/**
  * Planet class - handles planet creation and gravitational physics
  */
 class Planet {
@@ -15,32 +28,169 @@ class Planet {
     }
 
     /**
-     * Create the planet mesh with blue opaque material and black wireframe
+     * Create the planet mesh with black occluder sphere and lat/lon grid lines
      */
     createPlanetMesh() {
         this.mesh = new THREE.Group();
 
-        const geometry = new THREE.IcosahedronGeometry(this.radius, 32);
-
+        // Solid black sphere for occlusion (IcosahedronGeometry detail 32 = smooth sphere)
+        const occluderGeometry = new THREE.IcosahedronGeometry(this.radius, 32);
         const solidMaterial = new THREE.MeshBasicMaterial({
             color: 0x000000,
             polygonOffset: true,
             polygonOffsetFactor: 1,
             polygonOffsetUnits: 1
         });
+        this.planetMesh = new THREE.Mesh(occluderGeometry, solidMaterial);
+        this.mesh.add(this.planetMesh);
 
-        const wireframeMaterial = new THREE.LineBasicMaterial({
+        // Generate lat/lon grid lines
+        this.createLatLonGrid();
+
+        // Load coastlines asynchronously (pops in after grid is visible)
+        this.loadCoastlines();
+    }
+
+    /**
+     * Create latitude and longitude grid lines on the planet surface
+     */
+    createLatLonGrid() {
+        const positions = [];
+        const segmentsPerLine = 72; // 5-degree arc segments for smooth curves
+        const r = this.radius * 1.001; // Slightly above surface to prevent z-fighting
+
+        // Latitude lines every 15 degrees (-75 to +75, plus equator)
+        for (let lat = -75; lat <= 75; lat += 15) {
+            for (let i = 0; i < segmentsPerLine; i++) {
+                const lon1 = (i / segmentsPerLine) * 360 - 180;
+                const lon2 = ((i + 1) / segmentsPerLine) * 360 - 180;
+                const p1 = latLonToVector3(lat, lon1, r);
+                const p2 = latLonToVector3(lat, lon2, r);
+                positions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+            }
+        }
+
+        // Longitude lines every 15 degrees
+        for (let lon = -180; lon < 180; lon += 15) {
+            for (let i = 0; i < segmentsPerLine; i++) {
+                const lat1 = (i / segmentsPerLine) * 180 - 90;
+                const lat2 = ((i + 1) / segmentsPerLine) * 180 - 90;
+                const p1 = latLonToVector3(lat1, lon, r);
+                const p2 = latLonToVector3(lat2, lon, r);
+                positions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+            }
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
+
+        const material = new THREE.LineBasicMaterial({
             color: 0x1f7cda,
-            linewidth: 1
+            transparent: true,
+            opacity: 0.7
         });
 
-        this.planetMesh = new THREE.Mesh(geometry, solidMaterial);
+        const gridLines = new THREE.LineSegments(geometry, material);
+        this.mesh.add(gridLines);
+    }
 
-        const edges = new THREE.EdgesGeometry(geometry);
-        const wireframe = new THREE.LineSegments(edges, wireframeMaterial);
+    /**
+     * Load coastline data from GeoJSON and render as line segments on the planet surface
+     */
+    async loadCoastlines() {
+        try {
+            const response = await fetch('assets/ne_50m_coastline.json');
+            const geojson = await response.json();
 
-        this.mesh.add(this.planetMesh);
-        this.mesh.add(wireframe);
+            // Collect all line segment pairs into a flat array of positions
+            const positions = [];
+
+            for (const feature of geojson.features) {
+                const geom = feature.geometry;
+                let lines;
+
+                if (geom.type === 'MultiLineString') {
+                    lines = geom.coordinates;
+                } else if (geom.type === 'LineString') {
+                    lines = [geom.coordinates];
+                } else {
+                    continue;
+                }
+
+                for (const line of lines) {
+                    for (let i = 0; i < line.length - 1; i++) {
+                        const [lon1, lat1] = line[i];
+                        const [lon2, lat2] = line[i + 1];
+
+                        const p1 = latLonToVector3(lat1, lon1, this.radius);
+                        const p2 = latLonToVector3(lat2, lon2, this.radius);
+
+                        positions.push(p1.x, p1.y, p1.z);
+                        positions.push(p2.x, p2.y, p2.z);
+                    }
+                }
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
+
+            const material = new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            const coastlineSegments = new THREE.LineSegments(geometry, material);
+            this.mesh.add(coastlineSegments);
+        } catch (err) {
+            console.warn('Failed to load coastline data:', err);
+        }
+    }
+
+    /**
+     * Create an atmosphere glow effect using a Fresnel shader
+     */
+    createAtmosphere() {
+        const atmosphereGeometry = new THREE.IcosahedronGeometry(this.radius * 1.03, 16);
+
+        const vertexShader = `
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                vPosition = worldPosition.xyz;
+                gl_Position = projectionMatrix * viewMatrix * worldPosition;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform vec3 viewVector;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+
+            void main() {
+                vec3 eyeDir = normalize(viewVector - vPosition);
+                float rimFactor = pow(1.0 - abs(dot(vNormal, eyeDir)), 3.0);
+                gl_FragColor = vec4(0.12, 0.49, 0.85, rimFactor);
+            }
+        `;
+
+        this.atmosphereMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                viewVector: { value: new THREE.Vector3() }
+            },
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false
+        });
+
+        const atmosphereMesh = new THREE.Mesh(atmosphereGeometry, this.atmosphereMaterial);
+        this.mesh.add(atmosphereMesh);
     }
 
     /**
