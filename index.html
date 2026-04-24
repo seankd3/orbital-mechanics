@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spacecraft Simulator</title>
-    <link rel="stylesheet" href="style.css?v=mocr6">
+    <link rel="stylesheet" href="style.css?v=mocr7">
 </head>
 <body>
     <div id="bottom-bar">
@@ -125,21 +125,85 @@
         <div class="dsky-row"><span>V16</span><span id="dsky-mode">COAST</span></div>
         <div class="dsky-row"><span>N42</span><span id="dsky-node">NO NODE</span></div>
         <div class="dsky-row"><span>N81</span><span id="dsky-vector">DV +0000</span></div>
-        <div class="dsky-help">M MAP  N NODE  [ ] DV  B BURN  1/2/3/4 TOG</div>
+        <div class="dsky-help">M MAP  N NODE  [ ] DV  { } TIG  B BURN</div>
+    </div>
+
+    <div id="node-editor">
+        <div class="node-title">[ MANEUVER NODE ]</div>
+        <div class="node-status">
+            <span id="node-state">NO NODE</span>
+            <span id="node-total">0 m/s</span>
+        </div>
+
+        <div class="node-section">
+            <div class="node-row">
+                <span class="node-label">TIG</span>
+                <button type="button" data-node-time="-300">-5M</button>
+                <button type="button" data-node-time="-60">-1M</button>
+                <span class="node-readout" id="node-time">+00:00</span>
+                <button type="button" data-node-time="60">+1M</button>
+                <button type="button" data-node-time="300">+5M</button>
+            </div>
+            <div class="node-actions">
+                <button type="button" data-node-action="now">NOW</button>
+                <button type="button" data-node-action="ap">AP</button>
+                <button type="button" data-node-action="pe">PE</button>
+            </div>
+        </div>
+
+        <div class="node-section">
+            <div class="node-row">
+                <span class="node-label">PRO</span>
+                <button type="button" data-node-axis="prograde" data-node-delta="-100">--</button>
+                <button type="button" data-node-axis="prograde" data-node-delta="-10">-</button>
+                <span class="node-readout" id="node-prograde">+0</span>
+                <button type="button" data-node-axis="prograde" data-node-delta="10">+</button>
+                <button type="button" data-node-axis="prograde" data-node-delta="100">++</button>
+            </div>
+            <div class="node-row">
+                <span class="node-label">NRM</span>
+                <button type="button" data-node-axis="normal" data-node-delta="-100">--</button>
+                <button type="button" data-node-axis="normal" data-node-delta="-10">-</button>
+                <span class="node-readout" id="node-normal">+0</span>
+                <button type="button" data-node-axis="normal" data-node-delta="10">+</button>
+                <button type="button" data-node-axis="normal" data-node-delta="100">++</button>
+            </div>
+            <div class="node-row">
+                <span class="node-label">RAD</span>
+                <button type="button" data-node-axis="radial" data-node-delta="-100">--</button>
+                <button type="button" data-node-axis="radial" data-node-delta="-10">-</button>
+                <span class="node-readout" id="node-radial">+0</span>
+                <button type="button" data-node-axis="radial" data-node-delta="10">+</button>
+                <button type="button" data-node-axis="radial" data-node-delta="100">++</button>
+            </div>
+        </div>
+
+        <div class="node-section node-orbit">
+            <div><span>PRED AP</span><span id="node-ap">-- km</span></div>
+            <div><span>PRED PE</span><span id="node-pe">-- km</span></div>
+            <div><span>BURN</span><span id="node-burn">-- s</span></div>
+        </div>
+
+        <div class="node-actions node-main-actions">
+            <button type="button" data-node-action="create">CREATE</button>
+            <button type="button" data-node-action="zero">ZERO</button>
+            <button type="button" data-node-action="clear">CLEAR</button>
+            <button type="button" data-node-action="execute">BURN</button>
+        </div>
     </div>
 
     <!-- Import Three.js core -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 
     <!-- Import application scripts -->
-    <script src="js/scaleManager.js?v=mocr6"></script>
-    <script src="js/physics.js?v=mocr6"></script>
-    <script src="js/planet.js?v=mocr6"></script>
-    <script src="js/spacecraft.js?v=mocr6"></script>
-    <script src="js/starCatalog.js?v=mocr6"></script>
-    <script src="js/navball.js?v=mocr6"></script>
-    <script src="js/audio.js?v=mocr6"></script>
-    <script src="js/scene.js?v=mocr6"></script>
-    <script src="js/main.js?v=mocr6"></script>
+    <script src="js/scaleManager.js?v=mocr7"></script>
+    <script src="js/physics.js?v=mocr7"></script>
+    <script src="js/planet.js?v=mocr7"></script>
+    <script src="js/spacecraft.js?v=mocr7"></script>
+    <script src="js/starCatalog.js?v=mocr7"></script>
+    <script src="js/navball.js?v=mocr7"></script>
+    <script src="js/audio.js?v=mocr7"></script>
+    <script src="js/scene.js?v=mocr7"></script>
+    <script src="js/main.js?v=mocr7"></script>
 </body>
 </html>
