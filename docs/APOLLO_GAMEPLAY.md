@@ -5,7 +5,7 @@ This document describes the practical gameplay target for the current Apollo sim
 ## Core Player Loop
 
 1. Read the current mission state: phase, vehicle, body, orbit, propellant, attitude, maneuver node, and range to the Moon.
-2. Pick the next mission objective: launch, parking orbit, TLI, docking, LOI, LM descent, ascent, rendezvous, or TEI.
+2. Pick the next mission objective: parking orbit, TLI, docking, LOI, LM descent, ascent, rendezvous, TEI, or optional launch/ascent testing.
 3. Plan the action using the map view, maneuver node editor, navball, and mission assist buttons.
 4. Execute with either manual controls or an assist mode.
 5. Verify the result against telemetry and predicted orbit.
@@ -16,10 +16,12 @@ The desired feel is "flight director with hands on the controls": assists can pe
 
 ## Mission Phases
 
+Orbit-first play is the default for the current Apollo/KSP slice: the sim now boots into stable Earth parking orbit, `EORB` resets that checkpoint, and `LORB` jumps to a low lunar orbit for LOI/LM/TEI iteration. The simplified Saturn V launch path can return later for ascent tuning, but it should not block players from the orbital mission loop.
+
 ### 1. Prelaunch
 
 - Vehicle: Saturn V on the pad at Cape Canaveral.
-- Player intent: review mission panel, set camera/map preference, commit launch.
+- Player intent: optional ascent test or reset point, not the primary start for orbital play.
 - Current implementation: `LAUNCH` resets to Saturn V if needed and starts ascent guidance.
 - Needed gameplay: countdown state, launch commit/cancel, basic abort/reset path.
 
@@ -35,7 +37,7 @@ The desired feel is "flight director with hands on the controls": assists can pe
 
 - Vehicle: CSM+LM/S-IVB mission stack abstracted as CSM+LM after staging.
 - Player intent: stabilize orbit, inspect node tools, plan TLI.
-- Current implementation: `ORBIT` seeds a 185 km Earth parking orbit in CSM+LM mode.
+- Current implementation: the default boot state and `EORB` seed a 185 km Earth parking orbit in CSM+LM mode.
 - Needed gameplay: make this a legitimate ascent result, not only a shortcut; show parking-orbit checklist status.
 
 ### 4. Trans-Lunar Injection
@@ -160,9 +162,9 @@ Use clear cause labels in the mission log, for example `FAIL: LUNAR IMPACT`, `WA
 
 ### Mission Panel
 
-- `LAUNCH`: start Saturn V ascent guidance.
-- `STAGE`: manually separate current stage.
-- `ORBIT`: shortcut to Earth parking orbit.
+- `EORB`: reset to Earth parking orbit for the current KSP-style mission loop.
+- `LORB`: reset to low lunar orbit for lunar operations iteration.
+- `PAD`: return to the Saturn V pad checkpoint when ascent testing is needed.
 - `PRO`, `RET`, `RAD`: hold prograde, retrograde, or radial-out.
 - `TLI`, `LOI`, `PDI`, `TEI`: run fixed mission burns.
 - `DOCK`: set docked CSM+LM state.
