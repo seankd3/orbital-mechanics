@@ -472,13 +472,13 @@ class Spacecraft {
     createCSMLMMesh() {
         const group = new THREE.Group();
         const csm = this.createSpacecraftMesh();
-        csm.position.z = 1.1;
+        csm.position.z = -1.05;
         group.add(csm);
 
         const lm = this.createLMMesh(true);
         lm.scale.setScalar(0.86);
         lm.rotation.y = Math.PI;
-        lm.position.z = -2.15;
+        lm.position.z = 2.9;
         group.add(lm);
 
         return group;
