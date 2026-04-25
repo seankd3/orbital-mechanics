@@ -166,7 +166,7 @@ canvas#main-canvas {
     position: fixed;
     left: 12px;
     top: 112px;
-    width: clamp(312px, 30vw, 384px);
+    width: clamp(344px, 30vw, 424px);
     max-width: calc(100vw - 378px);
     max-height: calc(100vh - 236px);
     border: 1px solid var(--mocr-line);
@@ -189,14 +189,27 @@ canvas#main-canvas {
     border-bottom: 1px solid var(--mocr-dim);
     margin-bottom: 6px;
     padding-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+}
+
+.mission-mode {
+    color: var(--mocr-dim);
+    font-size: 10px;
+}
+
+.mission-grid,
+.mission-summary {
+    display: grid;
+    min-width: 0;
 }
 
 .mission-grid {
-    display: grid;
     grid-template-columns: 5ch minmax(0, 1fr) 5ch minmax(0, 1fr);
     column-gap: 6px;
     row-gap: 2px;
-    min-width: 0;
 }
 
 .mission-grid span:nth-child(odd) {
@@ -210,6 +223,37 @@ canvas#main-canvas {
     white-space: nowrap;
 }
 
+.mission-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.mission-summary > div {
+    border: 1px solid var(--mocr-dim);
+    padding: 4px 6px;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.mission-summary span,
+.mission-summary strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mission-summary span {
+    color: var(--mocr-dim);
+    font-size: 10px;
+}
+
+.mission-summary strong {
+    color: var(--mocr-text);
+    font-weight: normal;
+    margin-top: 1px;
+}
+
 .mission-actions {
     border-top: 1px solid var(--mocr-dim);
     margin-top: 7px;
@@ -220,14 +264,36 @@ canvas#main-canvas {
     min-width: 0;
 }
 
+.mission-action-groups {
+    border-top: 1px solid var(--mocr-dim);
+    margin-top: 7px;
+    padding-top: 7px;
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.mission-action-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+    gap: 5px;
+    min-width: 0;
+}
+
+.mission-action-group > span {
+    grid-column: 1 / -1;
+    color: var(--mocr-dim);
+    line-height: 1;
+}
+
 #mission-panel button {
-    height: 20px;
+    height: 22px;
     border: 1px solid var(--mocr-dim);
     background: #000;
     color: var(--mocr-text);
     font: inherit;
     font-size: 10px;
-    padding: 0 3px;
+    padding: 0 5px;
     box-sizing: border-box;
     cursor: pointer;
     min-width: 0;
@@ -264,7 +330,7 @@ canvas#main-canvas {
 .mission-subgrid,
 .mission-readouts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
     gap: 5px;
     min-width: 0;
 }

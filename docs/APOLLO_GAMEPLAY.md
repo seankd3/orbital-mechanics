@@ -16,7 +16,7 @@ The desired feel is "flight director with hands on the controls": assists can pe
 
 ## Mission Phases
 
-Orbit-first play is the default for the current Apollo/KSP slice: the sim now boots into stable Earth parking orbit, `EORB` resets that checkpoint, and `LORB` jumps to a low lunar orbit for LOI/LM/TEI iteration. The simplified Saturn V launch path can return later for ascent tuning, but it should not block players from the orbital mission loop.
+Orbit-first play is the default for the current Apollo/KSP slice: the sim now boots into stable Earth parking orbit, `Earth` resets that checkpoint, and `Moon` jumps to a low lunar orbit for LOI/LM/TEI iteration. The simplified Saturn V launch path can return later for ascent tuning, but it should not block players from the orbital mission loop.
 
 ### 1. Prelaunch
 
@@ -37,7 +37,7 @@ Orbit-first play is the default for the current Apollo/KSP slice: the sim now bo
 
 - Vehicle: CSM+LM/S-IVB mission stack abstracted as CSM+LM after staging.
 - Player intent: stabilize orbit, inspect node tools, plan TLI.
-- Current implementation: the default boot state and `EORB` seed a 185 km Earth parking orbit in CSM+LM mode.
+- Current implementation: the default boot state and `Earth` seed a 185 km Earth parking orbit in CSM+LM mode.
 - Needed gameplay: make this a legitimate ascent result, not only a shortcut; show parking-orbit checklist status.
 
 ### 4. Trans-Lunar Injection
@@ -162,9 +162,9 @@ Use clear cause labels in the mission log, for example `FAIL: LUNAR IMPACT`, `WA
 
 ### Mission Panel
 
-- `EORB`: reset to Earth parking orbit for the current KSP-style mission loop.
-- `LORB`: reset to low lunar orbit for lunar operations iteration.
-- `PAD`: return to the Saturn V pad checkpoint when ascent testing is needed.
+- `Earth`: reset to Earth parking orbit for the current KSP-style mission loop.
+- `Moon`: reset to low lunar orbit for lunar operations iteration.
+- `Pad`: return to the Saturn V pad checkpoint when ascent testing is needed.
 - `PRO`, `RET`, `RAD`: hold prograde, retrograde, or radial-out.
 - `TLI`, `LOI`, `PDI`, `TEI`: run fixed mission burns.
 - `DOCK`: set docked CSM+LM state.

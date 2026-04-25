@@ -70,9 +70,9 @@ Mission commands:
 
 | Button | Command | Enabled When | Feedback |
 | --- | --- | --- | --- |
-| `EORB` | load Earth parking-orbit checkpoint | sim assist/debug enabled | Log `EARTH ORBIT READY`; start CSM+LM in map view with prograde hold. |
-| `LORB` | load low lunar-orbit checkpoint | sim assist/debug enabled | Log `LUNAR ORBIT READY`; switch the active body to the Moon for lunar operations testing. |
-| `PAD` | load Saturn V pad checkpoint | optional ascent testing | Return to prelaunch without making launch the main gameplay entry point. |
+| `Earth` | load Earth parking-orbit checkpoint | sim assist/debug enabled | Log `EARTH ORBIT READY`; start CSM+LM in map view with prograde hold. |
+| `Moon` | load low lunar-orbit checkpoint | sim assist/debug enabled | Log `LUNAR ORBIT READY`; switch the active body to the Moon for lunar operations testing. |
+| `Pad` | load Saturn V pad checkpoint | optional ascent testing | Return to prelaunch without making launch the main gameplay entry point. |
 | `TLI` | propose or arm TLI node | stable Earth parking orbit | Do not fire immediately unless auto-burn is confirmed. |
 | `LOI` | propose/arm lunar capture | lunar SOI and perilune available | Warn if perilune is unsafe or SPS reserve too low. |
 | `PDI` | arm powered descent | LM descent, lunar orbit, landing site selected | Warn if CSM target orbit is invalid. |
@@ -221,8 +221,8 @@ Panel shortcuts:
 | Shortcut | Action |
 | --- | --- |
 | `Esc` | `OFF` / cancel active guidance |
-| `Shift+E` | `EORB` / load Earth orbit checkpoint |
-| `Shift+L` | `LORB` / load lunar orbit checkpoint |
+| `Shift+E` | `Earth` / load Earth orbit checkpoint |
+| `Shift+L` | `Moon` / load lunar orbit checkpoint |
 | `Shift+P` | hold prograde |
 | `Shift+R` | hold retrograde |
 | `Shift+H` | cycle radial/normal hold group |
