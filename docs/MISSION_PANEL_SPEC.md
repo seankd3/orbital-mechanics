@@ -1,6 +1,6 @@
 # Mission Panel UX Spec
 
-Implementation target: a compact Apollo/KSP command panel that extends the current `#mission-panel` without becoming a tutorial page. It should answer four questions at all times: where am I, what is the next mission action, is guidance helping or fighting me, and what went wrong if the plan fails.
+Implementation target: a compact, orbit-first Apollo/KSP command panel that extends the current `#mission-panel` without becoming a tutorial page. It should answer four questions at all times: where am I, what is the next orbital action, is guidance helping or fighting me, and what went wrong if the plan fails.
 
 ## Panel Structure
 
@@ -29,6 +29,7 @@ Orbit and transfer readouts:
 | --- | --- | --- |
 | `AP` / `PE` | apoapsis/periapsis altitude | Show `ESC` for hyperbolic, `IMPACT` when below surface/atmosphere. |
 | `TTA` / `TTP` | time to apoapsis/periapsis | Show `--` when not meaningful. |
+| `ORB` | active Apollo orbit guard | Show `GO`, `PE LOW`, `AP HIGH`, `ESCAPE`, or another short issue code. |
 | `ECC` | eccentricity | One to three decimals depending on magnitude. |
 | `RNG` | range to current target | Moon by default during Earth-Moon phases, docking target during rendezvous. |
 | `CA` | predicted closest approach | Hidden until a target exists. |
@@ -69,9 +70,9 @@ Mission commands:
 
 | Button | Command | Enabled When | Feedback |
 | --- | --- | --- | --- |
-| `LAUNCH` | start countdown/ascent guidance | prelaunch and valid Saturn V stack | Log `LAUNCH COMMIT`; switch `GUID` to launch. |
-| `STAGE` | separate active stage | stage is armed and safe | Log new vehicle/stage; warn on unsafe stage. |
-| `ORBIT` | load parking-orbit checkpoint | sim assist/debug enabled | Log `CHECKPOINT PARKING`; mark as non-scored. |
+| `EORB` | load Earth parking-orbit checkpoint | sim assist/debug enabled | Log `EARTH ORBIT READY`; start CSM+LM in map view with prograde hold. |
+| `LORB` | load low lunar-orbit checkpoint | sim assist/debug enabled | Log `LUNAR ORBIT READY`; switch the active body to the Moon for lunar operations testing. |
+| `PAD` | load Saturn V pad checkpoint | optional ascent testing | Return to prelaunch without making launch the main gameplay entry point. |
 | `TLI` | propose or arm TLI node | stable Earth parking orbit | Do not fire immediately unless auto-burn is confirmed. |
 | `LOI` | propose/arm lunar capture | lunar SOI and perilune available | Warn if perilune is unsafe or SPS reserve too low. |
 | `PDI` | arm powered descent | LM descent, lunar orbit, landing site selected | Warn if CSM target orbit is invalid. |
@@ -151,7 +152,7 @@ The log is append-only for the session and shows the latest five to eight entrie
 
 Examples:
 
-- `000:12:03 INFO LAUNCH COMMIT`
+- `000:00:00 INFO EARTH ORBIT READY`
 - `002:44:10 CAUTION PE BELOW ATM`
 - `075:31:20 WARN SPS RSV LOW`
 - `102:05:44 FAIL LUNAR IMPACT`
@@ -220,8 +221,8 @@ Panel shortcuts:
 | Shortcut | Action |
 | --- | --- |
 | `Esc` | `OFF` / cancel active guidance |
-| `Shift+Space` | `STAGE` when stage is armed |
-| `Shift+L` | `LAUNCH` / commit countdown |
+| `Shift+E` | `EORB` / load Earth orbit checkpoint |
+| `Shift+L` | `LORB` / load lunar orbit checkpoint |
 | `Shift+P` | hold prograde |
 | `Shift+R` | hold retrograde |
 | `Shift+H` | cycle radial/normal hold group |

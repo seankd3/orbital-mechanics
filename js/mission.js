@@ -13,7 +13,7 @@ class ApolloMission {
         this.scaleManager = scaleManager;
         this.primaryBody = earth;
         this.missionTime = 0;
-        this.phase = 'PRELAUNCH';
+        this.phase = 'PARKING';
         this.guidance = null;
         this.holdMode = null;
         this.burn = null;
@@ -37,8 +37,8 @@ class ApolloMission {
 
         this.createMoon();
         this.createMissionPanel();
-        this.resetToLaunchPad();
-        this.log('GUIDANCE READY');
+        this.setParkingOrbit({ log: false });
+        this.log('ORBIT OPS READY');
     }
 
     createMoon() {
@@ -100,25 +100,25 @@ class ApolloMission {
         this.panel = document.createElement('div');
         this.panel.id = 'mission-panel';
         this.panel.innerHTML = `
-            <div class="mission-title">[ APOLLO MISSION ]</div>
+            <div class="mission-title">[ APOLLO ORBIT OPS ]</div>
             <div class="mission-grid">
-                <span>PHASE</span><span data-mission="phase">PRELAUNCH</span>
+                <span>PHASE</span><span data-mission="phase">PARKING</span>
                 <span>MET</span><span data-mission="met">000:00:00</span>
                 <span>ACTIVE</span><span data-mission="body">EARTH</span>
-                <span>VEH</span><span data-mission="vehicle">SATURN V</span>
+                <span>VEH</span><span data-mission="vehicle">CSM+LM</span>
                 <span>GUID</span><span data-mission="guidance">IDLE</span>
                 <span>AP</span><span data-mission="ap">--</span>
                 <span>PE</span><span data-mission="pe">--</span>
                 <span>TTA</span><span data-mission="tta">--</span>
                 <span>TTP</span><span data-mission="ttp">--</span>
+                <span>ORB</span><span data-mission="orbit-status">--</span>
                 <span>TLI DV</span><span data-mission="tli-dv">--</span>
                 <span>CIRC</span><span data-mission="circ-dv">--</span>
                 <span>RANGE</span><span data-mission="range">--</span>
             </div>
             <div class="mission-actions">
-                <button type="button" data-apollo="launch">LAUNCH</button>
-                <button type="button" data-apollo="stage">STAGE</button>
-                <button type="button" data-apollo="park">ORBIT</button>
+                <button type="button" data-apollo="park">EORB</button>
+                <button type="button" data-apollo="lunar-orbit">LORB</button>
                 <button type="button" data-apollo="hold-prograde">PRO</button>
                 <button type="button" data-apollo="hold-retrograde">RET</button>
                 <button type="button" data-apollo="hold-radial">RAD</button>
@@ -134,6 +134,7 @@ class ApolloMission {
                 <button type="button" data-apollo="ascent">ASC</button>
                 <button type="button" data-apollo="tei">TEI</button>
                 <button type="button" data-apollo="csm">CSM</button>
+                <button type="button" data-apollo="pad">PAD</button>
                 <button type="button" data-apollo="off">OFF</button>
             </div>
             <div class="mission-log" data-mission="log"></div>
@@ -155,6 +156,12 @@ class ApolloMission {
                 break;
             case 'park':
                 this.setParkingOrbit();
+                break;
+            case 'lunar-orbit':
+                this.setLunarOrbit();
+                break;
+            case 'pad':
+                this.resetToLaunchPad();
                 break;
             case 'hold-prograde':
                 this.setHold('prograde');
@@ -422,33 +429,102 @@ class ApolloMission {
         this.log('STAGE ' + this.spacecraft.getVehicleLabel());
     }
 
-    setParkingOrbit() {
+    setParkingOrbit(options = {}) {
+        this.setOrbitAroundBody(this.earth, Object.assign({
+            altitude: 185000,
+            phase: 'PARKING',
+            logMessage: 'EARTH ORBIT READY',
+            lat: 0,
+            lon: -80,
+            mapZoom: 16000
+        }, options));
+    }
+
+    setLunarOrbit(options = {}) {
+        this.setOrbitAroundBody(this.moon, Object.assign({
+            altitude: 110000,
+            phase: 'LUNAR ORBIT',
+            logMessage: 'LUNAR ORBIT READY',
+            lat: 0,
+            lon: 24,
+            mapZoom: 5200
+        }, options));
+    }
+
+    setOrbitAroundBody(body, options = {}) {
+        if (!body || !this.spacecraft) return;
+
         this.spacecraft.configureApolloVehicles();
-        this.spacecraft.setVehicleMode('csm-lm');
+        this.spacecraft.setVehicleMode(options.vehicleMode || 'csm-lm');
 
-        const altitude = 185000;
-        const radius = 6371000 + altitude;
-        const radial = latLonToVector3(0, -80, 1).normalize();
-        const prograde = this.getEastVector(radial);
-        const speed = Math.sqrt(physics.G * this.earth.mass / radius);
+        const radial = (options.radial || latLonToVector3(options.lat || 0, options.lon || 0, 1)).normalize();
+        const progradeSeed = options.prograde || this.getEastVector(radial);
+        const orbitState = this.createCircularOrbitState(body, options.altitude || 185000, radial, progradeSeed);
 
-        this.spacecraft.setPosition(this.scaleManager.vectorToVisualizationSpace(radial.multiplyScalar(radius)));
-        this.spacecraft.setVelocity(this.scaleManager.vectorToVisualizationSpace(prograde.multiplyScalar(speed)));
+        this.spacecraft.setPosition(orbitState.position);
+        this.spacecraft.setVelocity(orbitState.velocity);
         this.spacecraft.mesh.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(
             new THREE.Vector3(0, 0, 1),
-            this.spacecraft.velocity.clone().normalize()
+            orbitState.relativeVelocity.clone().normalize()
         ));
+        this.spacecraft.angularVelocity.x = 0;
+        this.spacecraft.angularVelocity.y = 0;
+        this.spacecraft.angularVelocity.z = 0;
+        this.spacecraft.setThrust(false);
+        this.spacecraft.sasActive = true;
 
-        this.phase = 'PARKING';
-        this.primaryBody = this.earth;
-        this.scene.planet = this.earth;
-        this.scene.primaryBody = this.earth;
-        this.scene.cameraMode = 'map';
-        this.scene.mapSettings.zoom = 16000;
-        this.setLaunchDisplayMode(false);
+        this.padState = null;
+        this.metRunning = true;
+        this.missionTime = options.keepClock ? this.missionTime : 0;
+        this.primaryBody = body;
+        this.scene.planet = body;
+        this.scene.primaryBody = body;
+        this.phase = options.phase || (body === this.moon ? 'LUNAR ORBIT' : 'PARKING');
+        this.setWarp(1);
         this.clearGuidance(false);
+        this.holdMode = options.holdMode || 'prograde';
+        this.guidance = { type: 'hold', mode: this.holdMode };
+        this.scene.cameraMode = 'map';
+        this.scene.mapSettings.zoom = options.mapZoom || (body === this.moon ? 5200 : 16000);
+        this.scene.updateMapCameraProjection();
+        this.setLaunchDisplayMode(false);
+        if (this.scene.clearManeuver) {
+            this.scene.clearManeuver();
+        }
         this.scene.createOrbitalTrajectory();
-        this.log('PARKING ORBIT');
+        if (options.log !== false) {
+            this.log(options.logMessage || 'ORBIT READY');
+        } else {
+            this.updateTelemetry();
+        }
+    }
+
+    createCircularOrbitState(body, altitude, radial, progradeSeed) {
+        const bodyRadius = this.scaleManager.toRealWorld(body.radius);
+        const orbitRadius = bodyRadius + altitude;
+        const radialUnit = radial.clone().normalize();
+        let progradeUnit = progradeSeed.clone().sub(
+            radialUnit.clone().multiplyScalar(progradeSeed.dot(radialUnit))
+        );
+        if (progradeUnit.lengthSq() < 1e-10) {
+            progradeUnit = this.getEastVector(radialUnit);
+        }
+        progradeUnit.normalize();
+
+        const orbitalSpeed = Math.sqrt(physics.G * body.mass / orbitRadius);
+        const relativePosition = radialUnit.clone().multiplyScalar(orbitRadius);
+        const relativeVelocity = progradeUnit.clone().multiplyScalar(orbitalSpeed);
+        const bodyPosition = body.mesh && body.mesh.position ? body.mesh.position : new THREE.Vector3();
+        const bodyVelocity = body.velocity || new THREE.Vector3();
+
+        return {
+            orbitRadius,
+            orbitalSpeed,
+            relativePosition,
+            relativeVelocity,
+            position: bodyPosition.clone().add(this.scaleManager.vectorToVisualizationSpace(relativePosition)),
+            velocity: bodyVelocity.clone().add(this.scaleManager.vectorToVisualizationSpace(relativeVelocity))
+        };
     }
 
     isPadHoldActive() {
@@ -719,6 +795,7 @@ class ApolloMission {
         const showPlanning = !this.isLaunchDisplayActive() && this.phase !== 'PRELAUNCH';
         const tliEstimate = showPlanning ? this.computeTliDeltaV() : null;
         const circularizeEstimate = showPlanning ? this.computeCircularizeDeltaV(activeBody) : null;
+        const orbitGuard = showPlanning ? this.getOrbitGuard(activeBody, orbit) : null;
         const guidanceLabel = this.guidance ?
             (this.guidance.type === 'burn' && this.burn ? this.burn.label + ' ' + this.burn.remainingDV.toFixed(0) :
                 this.guidance.type === 'hold' ? 'HOLD ' + this.formatHoldMode(this.guidance.mode) : this.guidance.type.toUpperCase()) :
@@ -733,6 +810,7 @@ class ApolloMission {
         setText('pe', this.phase !== 'PRELAUNCH' && orbit ? this.formatOrbitAltitude(orbit.periapsis, bodyRadius) : '--');
         setText('tta', this.phase !== 'PRELAUNCH' && orbit ? this.formatDuration(this.timeToTrueAnomaly(orbit, Math.PI)) : '--');
         setText('ttp', this.phase !== 'PRELAUNCH' && orbit ? this.formatDuration(this.timeToTrueAnomaly(orbit, 0)) : '--');
+        setText('orbit-status', this.formatOrbitGuard(orbitGuard));
         setText('tli-dv', showPlanning ? this.formatDeltaVEstimate(tliEstimate) : '--');
         setText('circ-dv', showPlanning ? this.formatDeltaVEstimate(circularizeEstimate) : '--');
         setText('range', this.formatDistance(moonRange));
@@ -793,6 +871,31 @@ class ApolloMission {
     formatDeltaVEstimate(estimate) {
         if (!estimate || !isFinite(estimate.deltaV)) return '--';
         return (estimate.mode === 'prograde' ? 'PRO ' : 'RET ') + estimate.deltaV.toFixed(0);
+    }
+
+    getOrbitGuard(body, orbit) {
+        if (!orbit || !window.ApolloOrbitGuards) return null;
+        const profileName = body === this.moon ?
+            (this.spacecraft.vehicleMode === 'lm-ascent' ? 'lmAscentInsertion' : 'lunarOrbit') :
+            'earthParking';
+        return window.ApolloOrbitGuards.validateProfile(profileName, orbit);
+    }
+
+    formatOrbitGuard(guard) {
+        if (!guard) return '--';
+        if (guard.ok) return 'GO';
+        const labels = {
+            'surface-intersecting': 'IMPACT',
+            'periapsis-too-low': 'PE LOW',
+            'apoapsis-too-high': 'AP HIGH',
+            'not-bound': 'ESCAPE',
+            'eccentricity-too-high': 'ECC HIGH',
+            'periapsis-unavailable': 'PE?',
+            'apoapsis-unavailable': 'AP?',
+            'eccentricity-unavailable': 'ECC?',
+            'period-unavailable': 'PER?'
+        };
+        return labels[guard.issues[0]] || 'CHECK';
     }
 
     formatHoldMode(mode) {
