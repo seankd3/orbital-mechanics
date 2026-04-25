@@ -100,42 +100,59 @@ class ApolloMission {
         this.panel = document.createElement('div');
         this.panel.id = 'mission-panel';
         this.panel.innerHTML = `
-            <div class="mission-title">[ APOLLO ORBIT OPS ]</div>
-            <div class="mission-grid">
-                <span>PHASE</span><span data-mission="phase">PARKING</span>
-                <span>MET</span><span data-mission="met">000:00:00</span>
-                <span>ACTIVE</span><span data-mission="body">EARTH</span>
-                <span>VEH</span><span data-mission="vehicle">CSM+LM</span>
-                <span>GUID</span><span data-mission="guidance">IDLE</span>
-                <span>AP</span><span data-mission="ap">--</span>
-                <span>PE</span><span data-mission="pe">--</span>
-                <span>TTA</span><span data-mission="tta">--</span>
-                <span>TTP</span><span data-mission="ttp">--</span>
-                <span>ORB</span><span data-mission="orbit-status">--</span>
-                <span>TLI DV</span><span data-mission="tli-dv">--</span>
-                <span>CIRC</span><span data-mission="circ-dv">--</span>
-                <span>RANGE</span><span data-mission="range">--</span>
+            <div class="mission-title">
+                <span>[ APOLLO ORBIT OPS ]</span>
+                <span class="mission-mode">ORBIT-FIRST</span>
             </div>
-            <div class="mission-actions">
-                <button type="button" data-apollo="park">EORB</button>
-                <button type="button" data-apollo="lunar-orbit">LORB</button>
-                <button type="button" data-apollo="hold-prograde">PRO</button>
-                <button type="button" data-apollo="hold-retrograde">RET</button>
-                <button type="button" data-apollo="hold-radial">RAD</button>
-                <button type="button" data-apollo="hold-radial-in">RIN</button>
-                <button type="button" data-apollo="hold-normal">NRM</button>
-                <button type="button" data-apollo="hold-antinormal">AN</button>
-                <button type="button" data-apollo="tli">TLI</button>
-                <button type="button" data-apollo="circularize">CIRC</button>
-                <button type="button" data-apollo="dock">DOCK</button>
-                <button type="button" data-apollo="loi">LOI</button>
-                <button type="button" data-apollo="lm">LM</button>
-                <button type="button" data-apollo="pdi">PDI</button>
-                <button type="button" data-apollo="ascent">ASC</button>
-                <button type="button" data-apollo="tei">TEI</button>
-                <button type="button" data-apollo="csm">CSM</button>
-                <button type="button" data-apollo="pad">PAD</button>
-                <button type="button" data-apollo="off">OFF</button>
+            <div class="mission-summary">
+                <div><span>Phase</span><strong data-mission="phase">PARKING</strong></div>
+                <div><span>Body</span><strong data-mission="body">EARTH</strong></div>
+                <div><span>Craft</span><strong data-mission="vehicle">CSM+LM</strong></div>
+                <div><span>Assist</span><strong data-mission="guidance">IDLE</strong></div>
+            </div>
+            <div class="mission-readouts">
+                <div><span>MET</span><span data-mission="met">000:00:00</span></div>
+                <div><span>Orbit</span><span data-mission="orbit-status">--</span></div>
+                <div><span>AP</span><span data-mission="ap">--</span></div>
+                <div><span>PE</span><span data-mission="pe">--</span></div>
+                <div><span>To AP</span><span data-mission="tta">--</span></div>
+                <div><span>To PE</span><span data-mission="ttp">--</span></div>
+                <div><span>TLI</span><span data-mission="tli-dv">--</span></div>
+                <div><span>Circ</span><span data-mission="circ-dv">--</span></div>
+                <div><span>Moon</span><span data-mission="range">--</span></div>
+            </div>
+            <div class="mission-action-groups">
+                <div class="mission-action-group">
+                    <span>Checkpoint</span>
+                    <button type="button" data-apollo="park" title="Reset to Earth parking orbit">Earth</button>
+                    <button type="button" data-apollo="lunar-orbit" title="Reset to low lunar orbit">Moon</button>
+                    <button type="button" data-apollo="pad" title="Return to the Saturn V pad checkpoint">Pad</button>
+                </div>
+                <div class="mission-action-group">
+                    <span>Attitude</span>
+                    <button type="button" data-apollo="hold-prograde" title="Hold prograde">Pro</button>
+                    <button type="button" data-apollo="hold-retrograde" title="Hold retrograde">Retro</button>
+                    <button type="button" data-apollo="hold-radial" title="Hold radial out">Rad+</button>
+                    <button type="button" data-apollo="hold-radial-in" title="Hold radial in">Rad-</button>
+                    <button type="button" data-apollo="hold-normal" title="Hold normal">Norm+</button>
+                    <button type="button" data-apollo="hold-antinormal" title="Hold anti-normal">Norm-</button>
+                </div>
+                <div class="mission-action-group">
+                    <span>Burns</span>
+                    <button type="button" data-apollo="tli" title="Trans-lunar injection burn">TLI</button>
+                    <button type="button" data-apollo="circularize" title="Circularize the current orbit">Circ</button>
+                    <button type="button" data-apollo="loi" title="Lunar orbit insertion burn">LOI</button>
+                    <button type="button" data-apollo="pdi" title="Powered descent initiation burn">PDI</button>
+                    <button type="button" data-apollo="tei" title="Trans-Earth injection burn">TEI</button>
+                </div>
+                <div class="mission-action-group">
+                    <span>Vehicle</span>
+                    <button type="button" data-apollo="dock" title="Set docked CSM and LM state">Dock</button>
+                    <button type="button" data-apollo="lm" title="Activate LM descent stage">LM</button>
+                    <button type="button" data-apollo="ascent" title="Activate LM ascent stage">Ascent</button>
+                    <button type="button" data-apollo="csm" title="Activate CSM">CSM</button>
+                    <button type="button" data-apollo="off" title="Cancel mission guidance">Off</button>
+                </div>
             </div>
             <div class="mission-log" data-mission="log"></div>
         `;
