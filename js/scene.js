@@ -295,69 +295,107 @@ class Scene {
             return;
         }
 
-        // Use the naked-eye catalog as fixed line marks. Short line strokes are
-        // calmer on a real CRT than subpixel point sprites.
-        const bright = [];
-        for (let i = 0; i < catalog.length; i++) {
-            if (catalog[i][2] <= 6.0) bright.push(catalog[i]);
-        }
+        const geometry = this.createStarGeometry(catalog);
+        const material = new THREE.ShaderMaterial({
+            uniforms: {},
+            vertexShader: `
+                attribute vec3 color;
+                attribute float size;
+                attribute float alpha;
+                varying vec3 vColor;
+                varying float vAlpha;
 
-        const R = 5000000;
-        const count = bright.length;
-        const positions = [];
-        const colors = [];
+                void main() {
+                    vColor = color;
+                    vAlpha = alpha;
+                    gl_PointSize = size;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vColor;
+                varying float vAlpha;
 
-        for (let i = 0; i < count; i++) {
-            const ra = bright[i][0];
-            const dec = bright[i][1];
-            const mag = bright[i][2];
-            const rgb = this.bvToRGB(bright[i][3]);
-            const intensity = THREE.MathUtils.clamp(1.1 - ((mag + 1.5) / 8.0), 0.18, 1.0);
-
-            const raRad = ra * (Math.PI / 180);
-            const decRad = dec * (Math.PI / 180);
-            const dir = new THREE.Vector3(
-                Math.cos(decRad) * Math.cos(raRad),
-                Math.sin(decRad),
-                -Math.cos(decRad) * Math.sin(raRad)
-            ).normalize();
-
-            const tangent = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
-            if (tangent.lengthSq() < 0.0001) {
-                tangent.crossVectors(dir, new THREE.Vector3(1, 0, 0));
-            }
-            tangent.normalize();
-
-            const center = dir.clone().multiplyScalar(R);
-            const halfLength = mag < 1.0 ? 2200 : mag < 3.0 ? 1400 : 720;
-            const a = center.clone().addScaledVector(tangent, -halfLength);
-            const b = center.clone().addScaledVector(tangent, halfLength);
-            positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
-            colors.push(
-                rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity,
-                rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity
-            );
-        }
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(colors), 3));
-
-        const material = new THREE.LineBasicMaterial({
-            vertexColors: true,
+                void main() {
+                    vec2 coord = gl_PointCoord - vec2(0.5);
+                    float dist = length(coord);
+                    if (dist > 0.5) discard;
+                    float core = smoothstep(0.5, 0.08, dist);
+                    gl_FragColor = vec4(vColor, vAlpha * core);
+                }
+            `,
             transparent: true,
-            opacity: 0.85,
+            blending: THREE.AdditiveBlending,
             depthWrite: false,
-            depthTest: false
+            depthTest: false,
+            vertexColors: true
         });
 
         // Stars go in their own scene so they never interact with the main depth buffer.
         // Rendered first each frame, then depth is cleared before the main scene.
         this.starScene = new THREE.Scene();
-        const stars = new THREE.LineSegments(geometry, material);
+        const stars = new THREE.Points(geometry, material);
         stars.frustumCulled = false;
         this.starField = stars;
         this.starScene.add(stars);
+    }
+
+    createStarGeometry(catalog) {
+        const radius = 5000000;
+        const positions = [];
+        const colors = [];
+        const sizes = [];
+        const alphas = [];
+
+        for (let i = 0; i < catalog.length; i++) {
+            const star = catalog[i];
+            const mag = star[2];
+            if (!isFinite(mag) || mag > 6.5) continue;
+
+            const dir = this.starDirectionFromRaDec(star[0], star[1]);
+            const rgb = this.bvToRGB(star[3]);
+            const colorScale = this.starColorIntensity(mag);
+            positions.push(dir.x * radius, dir.y * radius, dir.z * radius);
+            colors.push(rgb[0] * colorScale, rgb[1] * colorScale, rgb[2] * colorScale);
+            sizes.push(this.starPointSize(mag));
+            alphas.push(this.starAlpha(mag));
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(colors), 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(new Float32Array(sizes), 1));
+        geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(new Float32Array(alphas), 1));
+        return geometry;
+    }
+
+    starDirectionFromRaDec(raDeg, decDeg) {
+        const raRad = THREE.MathUtils.degToRad(raDeg);
+        const decRad = THREE.MathUtils.degToRad(decDeg);
+        const cosDec = Math.cos(decRad);
+
+        // ICRS/J2000 equatorial axes remapped to Three: X = RA 0h,
+        // Y = north celestial pole, -Z = RA 6h. This preserves handedness.
+        return new THREE.Vector3(
+            cosDec * Math.cos(raRad),
+            Math.sin(decRad),
+            -cosDec * Math.sin(raRad)
+        ).normalize();
+    }
+
+    starPointSize(magnitude) {
+        const clamped = THREE.MathUtils.clamp(magnitude, -1.5, 6.5);
+        return THREE.MathUtils.clamp(7.4 - (clamped + 1.5) * 0.72, 1.15, 8.2);
+    }
+
+    starAlpha(magnitude) {
+        const relativeToSirius = Math.pow(10, -0.4 * (magnitude + 1.46));
+        return THREE.MathUtils.clamp(0.18 + Math.pow(relativeToSirius, 0.35) * 0.74, 0.18, 0.98);
+    }
+
+    starColorIntensity(magnitude) {
+        const relativeToSirius = Math.pow(10, -0.4 * (magnitude + 1.46));
+        return THREE.MathUtils.clamp(0.62 + Math.pow(relativeToSirius, 0.22) * 0.55, 0.62, 1.25);
     }
 
     /**
