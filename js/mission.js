@@ -15,6 +15,7 @@ class ApolloMission {
         this.missionTime = 0;
         this.phase = 'PARKING';
         this.guidance = null;
+        this.assistOwner = null;
         this.holdMode = null;
         this.burn = null;
         this.logs = [];
@@ -343,7 +344,7 @@ class ApolloMission {
 
         const stage = this.spacecraft.getActiveStage ? this.spacecraft.getActiveStage() : null;
         if (stage && stage.propellant <= 1) {
-            this.stage();
+            this.stage({ preserveGuidance: true });
         }
 
         const orbit = this.computeOrbit(this.earth);
@@ -370,6 +371,7 @@ class ApolloMission {
             this.spacecraft.setThrust(false);
             this.burn = null;
             this.guidance = { type: 'hold', mode: this.holdMode || 'prograde' };
+            this.assistOwner = 'mission-hold';
             this.phase = label + ' COMPLETE';
             this.log(label + ' CUTOFF');
             this.scene.createOrbitalTrajectory();
@@ -428,16 +430,22 @@ class ApolloMission {
             this.resetToLaunchPad();
         }
         this.setWarp(1);
+        this.cancelSceneAssistOwners('LAUNCH');
         this.metRunning = true;
         this.padState = null;
         this.phase = 'LAUNCH';
         this.guidance = { type: 'launch', elapsed: 0 };
+        this.assistOwner = 'launch-guidance';
         this.burn = null;
         this.setLaunchDisplayMode(true);
         this.log('LAUNCH COMMIT');
     }
 
-    stage() {
+    stage(options = {}) {
+        if (!options.preserveGuidance) {
+            this.cancelGuidanceForExternalOwner('STAGE');
+            this.cancelSceneAssistOwners('STAGE');
+        }
         if (!this.spacecraft.separateStage || !this.spacecraft.separateStage()) {
             this.log('NO STAGE');
             return;
@@ -501,6 +509,7 @@ class ApolloMission {
         this.clearGuidance(false);
         this.holdMode = options.holdMode || 'prograde';
         this.guidance = { type: 'hold', mode: this.holdMode };
+        this.assistOwner = 'mission-hold';
         this.scene.cameraMode = 'map';
         this.scene.mapSettings.zoom = options.mapZoom || (body === this.moon ? 5200 : 16000);
         this.scene.updateMapCameraProjection();
@@ -613,8 +622,10 @@ class ApolloMission {
     }
 
     setHold(mode) {
+        this.cancelSceneAssistOwners('HOLD');
         this.holdMode = mode;
         this.guidance = { type: 'hold', mode };
+        this.assistOwner = 'mission-hold';
         this.spacecraft.sasActive = true;
         this.log('HOLD ' + this.formatHoldMode(mode));
     }
@@ -651,6 +662,7 @@ class ApolloMission {
             return;
         }
         this.setWarp(1);
+        this.cancelSceneAssistOwners(label);
         this.holdMode = mode;
         this.burn = {
             label,
@@ -658,6 +670,7 @@ class ApolloMission {
             massBefore: null
         };
         this.guidance = { type: 'burn', mode };
+        this.assistOwner = 'mission-burn';
         this.spacecraft.sasActive = true;
         this.phase = label + ' BURN';
         this.log(label + ' START ' + deltaV.toFixed(0));
@@ -666,9 +679,52 @@ class ApolloMission {
     clearGuidance(log = true) {
         this.guidance = null;
         this.burn = null;
+        this.assistOwner = null;
         this.holdMode = null;
         if (this.spacecraft) this.spacecraft.setThrust(false);
+        if (this.scene && this.scene.cancelManeuverAssist) {
+            this.scene.cancelManeuverAssist('OFF', { log: false });
+        }
         if (log) this.log('GUIDANCE OFF');
+    }
+
+    getMissionAssistOwner() {
+        return this.assistOwner;
+    }
+
+    getActiveAssistOwner() {
+        if (this.assistOwner) return this.assistOwner;
+        if (this.scene && this.scene.getCurrentAssistOwner) {
+            return this.scene.getCurrentAssistOwner();
+        }
+        return null;
+    }
+
+    cancelSceneAssistOwners(reason) {
+        if (!this.scene) return;
+        if (this.scene.cancelManeuverAssist) {
+            this.scene.cancelManeuverAssist(reason, { log: false });
+        }
+        if (this.scene.clearManualAssistOwner) {
+            this.scene.clearManualAssistOwner();
+        }
+    }
+
+    cancelGuidanceForExternalOwner(reason) {
+        if (!this.guidance && !this.assistOwner && !this.burn) return false;
+
+        const owner = this.assistOwner || 'mission';
+        this.guidance = null;
+        this.burn = null;
+        this.assistOwner = null;
+        this.holdMode = null;
+        if (this.spacecraft) this.spacecraft.setThrust(false);
+        this.log(reason + ' CANCEL ' + this.formatAssistOwner(owner));
+        return true;
+    }
+
+    cancelForManualInput(reason) {
+        return this.cancelGuidanceForExternalOwner(reason || 'MANUAL');
     }
 
     holdAttitude(mode, deltaTime) {
@@ -814,9 +870,10 @@ class ApolloMission {
         const circularizeEstimate = showPlanning ? this.computeCircularizeDeltaV(activeBody) : null;
         const orbitGuard = showPlanning ? this.getOrbitGuard(activeBody, orbit) : null;
         const guidanceLabel = this.guidance ?
-            (this.guidance.type === 'burn' && this.burn ? this.burn.label + ' ' + this.burn.remainingDV.toFixed(0) :
-                this.guidance.type === 'hold' ? 'HOLD ' + this.formatHoldMode(this.guidance.mode) : this.guidance.type.toUpperCase()) :
-            'IDLE';
+            (this.guidance.type === 'burn' && this.burn ? 'MISSION BURN ' + this.burn.label + ' ' + this.burn.remainingDV.toFixed(0) :
+                this.guidance.type === 'hold' ? 'MISSION HOLD ' + this.formatHoldMode(this.guidance.mode) :
+                    this.formatAssistOwner(this.assistOwner) || this.guidance.type.toUpperCase()) :
+            this.formatAssistOwner(this.getActiveAssistOwner()) || 'IDLE';
 
         setText('phase', this.phase);
         setText('met', this.formatMET(this.missionTime));
@@ -925,6 +982,19 @@ class ApolloMission {
             antiNormal: 'ANTI-NORMAL'
         };
         return labels[mode] || String(mode || 'HOLD').toUpperCase();
+    }
+
+    formatAssistOwner(owner) {
+        const labels = {
+            manual: 'MANUAL',
+            'manual-node': 'NODE',
+            'mission-hold': 'MISSION HOLD',
+            'mission-burn': 'MISSION BURN',
+            'launch-guidance': 'LAUNCH GUIDANCE',
+            'descent-guidance': 'DESCENT GUIDANCE',
+            'rendezvous-guidance': 'RENDEZVOUS GUIDANCE'
+        };
+        return owner ? (labels[owner] || String(owner).toUpperCase()) : '';
     }
 
     log(message) {

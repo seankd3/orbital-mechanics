@@ -51,6 +51,10 @@ class Scene {
             burnCutoffTime: null,
             predictedOrbit: null
         };
+        this.assistOwnership = {
+            manual: null,
+            node: null
+        };
 
         this.displayOptions = {
             orbit: true,
@@ -551,24 +555,33 @@ class Scene {
 
         switch (event.key) {
             case ' ':
+                if (!this.keys.space && !event.repeat) {
+                    this.claimManualAssist('MANUAL THRUST');
+                }
                 this.keys.space = true;
                 break;
             case 'w':
+                if (!this.keys.w && !event.repeat) this.claimManualAssist('MANUAL ATTITUDE');
                 this.keys.w = true;
                 break;
             case 'a':
+                if (!this.keys.a && !event.repeat) this.claimManualAssist('MANUAL ATTITUDE');
                 this.keys.a = true;
                 break;
             case 's':
+                if (!this.keys.s && !event.repeat) this.claimManualAssist('MANUAL ATTITUDE');
                 this.keys.s = true;
                 break;
             case 'd':
+                if (!this.keys.d && !event.repeat) this.claimManualAssist('MANUAL ATTITUDE');
                 this.keys.d = true;
                 break;
             case 'q':
+                if (!this.keys.q && !event.repeat) this.claimManualAssist('MANUAL ATTITUDE');
                 this.keys.q = true;
                 break;
             case 'e':
+                if (!this.keys.e && !event.repeat) this.claimManualAssist('MANUAL ATTITUDE');
                 this.keys.e = true;
                 break;
             case '.':
@@ -688,6 +701,11 @@ class Scene {
             case 'o':
                 this.keys.o = false;
                 break;
+        }
+
+        if (!this.keys.space && !this.keys.w && !this.keys.a && !this.keys.s &&
+            !this.keys.d && !this.keys.q && !this.keys.e) {
+            this.clearManualAssistOwner();
         }
     }
 
@@ -1002,13 +1020,79 @@ class Scene {
     /**
      * Process keyboard input
      */
+    getCurrentAssistOwner() {
+        if (this.assistOwnership.node) return this.assistOwnership.node;
+        if (this.assistOwnership.manual) return this.assistOwnership.manual;
+        return null;
+    }
+
+    getNodeAssistOwner() {
+        return this.assistOwnership.node;
+    }
+
+    getManualAssistOwner() {
+        return this.assistOwnership.manual;
+    }
+
+    clearManualAssistOwner() {
+        this.assistOwnership.manual = null;
+    }
+
+    claimManualAssist(reason) {
+        this.assistOwnership.manual = 'manual';
+        this.cancelManeuverAssist(reason || 'MANUAL', { log: true });
+        if (this.mission && this.mission.cancelForManualInput) {
+            this.mission.cancelForManualInput(reason || 'MANUAL');
+        }
+    }
+
+    setNodeAssistOwner(owner) {
+        this.assistOwnership.node = owner || null;
+        if (owner) {
+            this.clearManualAssistOwner();
+            if (this.mission && this.mission.cancelGuidanceForExternalOwner) {
+                this.mission.cancelGuidanceForExternalOwner('NODE');
+            }
+        }
+    }
+
+    cancelManeuverAssist(reason, options = {}) {
+        const hadNodeAssist = this.maneuver.autoAlign || this.maneuver.autoBurn || this.maneuver.burnActive || this.assistOwnership.node;
+        if (!hadNodeAssist) return false;
+
+        this.maneuver.autoAlign = false;
+        this.maneuver.autoBurn = false;
+        this.maneuver.burnActive = false;
+        this.maneuver.burnRemainingDV = 0;
+        this.maneuver.burnInitialDV = 0;
+        this.maneuver.burnMassBefore = null;
+        this.maneuver.burnCutoffTime = null;
+        this.assistOwnership.node = null;
+        if (this.spacecraft) {
+            this.spacecraft.setThrust(false);
+        }
+        if (options.log && this.mission && this.mission.log) {
+            this.mission.log((reason || 'ASSIST') + ' CANCEL NODE');
+        }
+        return true;
+    }
+
+    isAutoThrustOwnerActive() {
+        const missionOwner = this.mission && this.mission.getMissionAssistOwner ?
+            this.mission.getMissionAssistOwner() :
+            null;
+        return this.maneuver.burnActive ||
+            missionOwner === 'mission-burn' ||
+            missionOwner === 'launch-guidance';
+    }
+
     processInput(deltaTime) {
         if (!this.spacecraft) return;
 
         // Forward thrust with spacebar (SPS engine)
         if (this.keys.space && this.spacecraft.spsPropellant > 0) {
             this.spacecraft.setThrust(true);
-        } else {
+        } else if (!this.isAutoThrustOwnerActive()) {
             this.spacecraft.setThrust(false);
         }
 
@@ -1677,6 +1761,7 @@ class Scene {
     }
 
     clearManeuver() {
+        this.cancelManeuverAssist('CLEAR', { log: false });
         this.maneuver.active = false;
         this.maneuver.progradeDV = 0;
         this.maneuver.normalDV = 0;
@@ -1689,6 +1774,7 @@ class Scene {
         this.maneuver.burnInitialDV = 0;
         this.maneuver.burnMassBefore = null;
         this.maneuver.burnCutoffTime = null;
+        this.assistOwnership.node = null;
         if (this.spacecraft) {
             this.spacecraft.setThrust(false);
         }
@@ -1707,8 +1793,7 @@ class Scene {
         const property = axis + 'DV';
         if (!(property in this.maneuver)) return;
         this.maneuver[property] = THREE.MathUtils.clamp(this.maneuver[property] + delta, -3000, 3000);
-        this.maneuver.autoBurn = false;
-        this.maneuver.burnActive = false;
+        this.cancelManeuverAssist('NODE EDIT', { log: true });
         this.updatePredictedTrajectory(true);
     }
 
@@ -1720,8 +1805,7 @@ class Scene {
         const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
         const maxTime = orbit && isFinite(orbit.orbitalPeriod) ? orbit.orbitalPeriod : 86400;
         this.maneuver.nodeTime = THREE.MathUtils.clamp(this.maneuver.nodeTime + deltaSeconds, 0, maxTime);
-        this.maneuver.autoBurn = false;
-        this.maneuver.burnActive = false;
+        this.cancelManeuverAssist('NODE EDIT', { log: true });
         this.updatePredictedTrajectory(true);
     }
 
@@ -1737,10 +1821,7 @@ class Scene {
                 this.maneuver.progradeDV = 0;
                 this.maneuver.normalDV = 0;
                 this.maneuver.radialDV = 0;
-                this.maneuver.autoAlign = false;
-                this.maneuver.autoBurn = false;
-                this.maneuver.burnActive = false;
-                this.maneuver.burnRemainingDV = 0;
+                this.cancelManeuverAssist('NODE ZERO', { log: true });
                 this.updatePredictedTrajectory(true);
                 break;
             case 'align':
@@ -1751,6 +1832,7 @@ class Scene {
                 break;
             case 'now':
                 this.maneuver.nodeTime = 0;
+                this.cancelManeuverAssist('NODE EDIT', { log: true });
                 this.createManeuver();
                 break;
             case 'ap':
@@ -1766,6 +1848,7 @@ class Scene {
         const orbit = this._cachedOrbitalParams || this.calculateOrbitalParameters();
         if (!orbit) return;
         this.maneuver.nodeTime = Math.max(0, this.timeToTrueAnomaly(orbit, trueAnomaly));
+        this.cancelManeuverAssist('NODE EDIT', { log: true });
         this.createManeuver();
     }
 
@@ -1808,6 +1891,7 @@ class Scene {
         if (trueAnomaly < 0) trueAnomaly += Math.PI * 2;
 
         this.maneuver.nodeTime = Math.max(0, this.timeToTrueAnomaly(orbit, trueAnomaly));
+        this.cancelManeuverAssist('NODE EDIT', { log: true });
         this.createManeuver();
     }
 
@@ -1863,6 +1947,7 @@ class Scene {
 
         this.maneuver.autoBurn = true;
         this.maneuver.autoAlign = true;
+        this.setNodeAssistOwner('manual-node');
         if (this.spacecraft) {
             this.spacecraft.sasActive = true;
         }
@@ -1873,6 +1958,11 @@ class Scene {
             this.createManeuver();
         }
         this.maneuver.autoAlign = !this.maneuver.autoAlign;
+        if (this.maneuver.autoAlign) {
+            this.setNodeAssistOwner('manual-node');
+        } else if (!this.maneuver.autoBurn && !this.maneuver.burnActive) {
+            this.assistOwnership.node = null;
+        }
         if (this.spacecraft && this.maneuver.autoAlign) {
             this.spacecraft.sasActive = true;
         }
@@ -1884,6 +1974,9 @@ class Scene {
         const target = this.getCurrentManeuverVectorVisual();
         if (!target || target.lengthSq() < 1e-10) {
             this.maneuver.autoAlign = false;
+            if (!this.maneuver.autoBurn && !this.maneuver.burnActive) {
+                this.assistOwnership.node = null;
+            }
             return;
         }
 
@@ -1911,6 +2004,9 @@ class Scene {
 
         if (!this.maneuver.burnActive && this.getManeuverAlignmentErrorDeg() < 0.4) {
             this.maneuver.autoAlign = false;
+            if (!this.maneuver.autoBurn) {
+                this.assistOwnership.node = null;
+            }
         }
     }
 
@@ -1933,6 +2029,7 @@ class Scene {
         this.maneuver.burnRemainingDV = this.maneuver.burnInitialDV;
         this.maneuver.burnMassBefore = null;
         this.maneuver.burnCutoffTime = null;
+        this.setNodeAssistOwner('manual-node');
         this.spacecraft.sasActive = true;
 
         if (this.timeWarp.factor > 1) {
