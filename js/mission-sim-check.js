@@ -442,6 +442,41 @@ check('Apollo orbit guards reject unsafe or non-bound Apollo progression states'
     assert.ok(escape.issues.includes('not-bound'), 'escape state should name bound-orbit issue');
 });
 
+check('mission assist ownership cancels thrust and scene node assists explicitly', () => {
+    const mission = Object.create(ApolloMission.prototype);
+    const thrustCommands = [];
+    const nodeCancels = [];
+    mission.guidance = { type: 'burn', mode: 'prograde' };
+    mission.assistOwner = 'mission-burn';
+    mission.burn = { label: 'TLI', remainingDV: 100, massBefore: null };
+    mission.holdMode = 'prograde';
+    mission.missionTime = 0;
+    mission.spacecraft = {
+        setThrust(value) {
+            thrustCommands.push(value);
+        }
+    };
+    mission.scene = {
+        cancelManeuverAssist(reason, options) {
+            nodeCancels.push({ reason, log: options.log });
+        }
+    };
+    mission.logs = [];
+    mission.updateTelemetry = () => {};
+
+    assert.equal(mission.cancelForManualInput('MANUAL THRUST'), true, 'manual input should cancel mission burn');
+    assert.equal(mission.assistOwner, null, 'mission owner should clear');
+    assert.equal(mission.guidance, null, 'mission guidance should clear');
+    assert.equal(mission.burn, null, 'mission burn state should clear');
+    assert.deepEqual(thrustCommands, [false], 'mission cancellation should stop thrust');
+    assert.ok(mission.logs[0].includes('MANUAL THRUST CANCEL MISSION BURN'), 'log should name cancellation owner');
+
+    mission.assistOwner = 'mission-hold';
+    mission.guidance = { type: 'hold', mode: 'prograde' };
+    mission.clearGuidance(false);
+    assert.deepEqual(nodeCancels, [{ reason: 'OFF', log: false }], 'OFF should cancel node assist through scene API');
+});
+
 let failures = 0;
 
 for (const { name, fn } of checks) {
