@@ -1,5 +1,24 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [2.0.0] - 2026-07-09 — Full rebuild
+
+### Changed
+- Rebuilt from scratch as a Vite + TypeScript ES-module app (was CDN script tags + globals on Three.js r132)
+- Simulation now runs in true SI units with an RK4 integrator; render space is scaled separately
+- Time warp up to 100,000×: numeric integration through 100×, exact on-rails Kepler propagation above (zero drift)
+- Retro CRT vector aesthetic pushed further: phosphor graticule Earth, thin atmospheric limb glow, bloom + chromatic-fringe/vignette shader pass, CSS scanlines
+
+### Added
+- Fuel and delta-v budget (Tsiolkovsky), throttle control (Shift/Ctrl, Z/X)
+- Exponential atmosphere below 140 km with drag — deorbits actually decay now
+- Mission objectives: raise apoapsis → circularize → deorbit → reentry, ending in splashdown (or a crash if you skip steps)
+- Orbit prediction line with periapsis/apoapsis markers, handles hyperbolic arcs
+- Warp auto-cancel on manual control input and at atmospheric interface
+- Notifications, mission log, and a redesigned green-phosphor HUD
+
+### Removed
+- Legacy `js/` global-namespace modules and CDN Three.js dependency
+
 ## [1.6.0] - 2025-03-30
 
 ### Added
