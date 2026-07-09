@@ -1,167 +1,73 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spacecraft Simulator</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Load Three.js core library first so that the examples can attach to the
-         global THREE namespace. Without loading three.min.js before the
-         example scripts the plugins will throw errors because THREE is not
-         defined yet. -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-
-    <!-- Additional shader and post‑processing dependencies required by
-         EffectComposer and UnrealBloomPass. These scripts extend the THREE
-         namespace with ShaderPass, CopyShader and LuminosityHighPassShader
-         implementations used internally by the bloom effect. Without them the
-         post‑processing pipeline will log errors and fail to render. -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/Pass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/CopyShader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/ShaderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/LuminosityHighPassShader.js"></script>
-
-    <!-- Post‑processing plugins attach their constructors to the global THREE
-         object (e.g. THREE.EffectComposer). These scripts must be loaded
-         after three.min.js so that the constructors can augment the THREE
-         namespace correctly. -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/EffectComposer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/RenderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/UnrealBloomPass.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ORBITAL // Vector Flight Console</title>
 </head>
 <body>
-    <div id="main-Panel">
-        <div id="info-panel">
-            <h2>Status</h2>
-            <div>
-                <div class="info-row">
-                    <div class="var-name">Velocity:</div>
-                    <div class="data-container">
-                        <span id="velocity" class="data-value">0.0</span>
-                        <span class="data-unit">m/s</span>
-                    </div>
-                </div>
-                
-                <div class="info-row">
-                    <div class="var-name">Altitude:</div>
-                    <div class="data-container">
-                        <span id="altitude" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Time Warp:</div>
-                    <div class="data-container">
-                        <span id="time-warp" class="data-value">1x</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Thrust:</div>
-                    <div class="data-container">
-                        <span id="thrust-status" class="data-value">OFF</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">SAS:</div>
-                    <div class="data-container">
-                        <span id="sas-status" class="data-value">OFF</span>
-                    </div>
-                </div>
-            </div>
-            
-            <h3>Orbital Parameters</h3>
-            <div>
-                <div class="info-row">
-                    <div class="var-name">Perigee:</div>
-                    <div class="data-container">
-                        <span id="perigee" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Apogee:</div>
-                    <div class="data-container">
-                        <span id="apogee" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Semi-major Axis:</div>
-                    <div class="data-container">
-                        <span id="semi-major-axis" class="data-value">0.0</span>
-                        <span class="data-unit">km</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="var-name">Orbital Period:</div>
-                    <div class="data-container">
-                        <span id="orbital-period" class="data-value">0.0</span>
-                        <span class="data-unit">min</span>
-                    </div>
-                </div>
-                
-                <div class="info-row">
-                    <div class="var-name">Eccentricity:</div>
-                    <div class="data-container">
-                        <span id="eccentricity" class="data-value">0.0</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="controls-panel">
-            <h3>Controls</h3>
-            <p>
-                SPACE: Forward Thrust<br>
-                W/S: Pitch (down/up)<br>
-                A/D: Yaw (left/right)<br>
-                Q/E: Roll (left/right)<br>
-                T: Toggle SAS<br>
-                Mouse Drag: Orbit Camera<br>
-                Mouse Wheel: Zoom In/Out<br>
-                R: Reset Camera Position<br>
-                .: Increase Time Warp<br>
-                ,: Decrease Time Warp
-            </p>
-        </div>
-        
-        <!-- Time Warp Indicator -->
-        <div id="time-warp-indicator" style="display: none; position: fixed; top: 20px; right: 20px; background-color: rgba(255, 50, 50, 0.7); color: white; font-weight: bold; padding: 10px; border-radius: 5px;">
-            WARP
-        </div>
-    </div>
-    
-    <!-- Import OrbitControls after Three.js has been loaded in the head. We no longer
-         import three.min.js here because it is loaded earlier in the head to
-         ensure plugins find the THREE namespace. -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    
-    <!-- Create directories if they don't exist -->
-    <script>
-        // We'll use these script files
-    </script>
-    
-    <!-- Import our scripts -->
-    <script src="js/scaleManager.js"></script>
-    <script src="js/planet.js"></script>
-    <script src="js/spacecraft.js"></script>
-    <script src="js/physics.js"></script>
-    <script src="js/scene.js"></script>
-    <script src="js/main.js"></script>
+  <div id="app"></div>
 
-    <!-- Debugging helper: display uncaught errors on the page so that runtime
-         exceptions are visible even without a developer console. This hook
-         appends the error message and location to the document body. -->
-    <script>
-        window.addEventListener('error', function (e) {
-            const pre = document.createElement('pre');
-            pre.style.color = 'red';
-            pre.style.background = 'rgba(255,255,255,0.1)';
-            pre.style.position = 'absolute';
-            pre.style.zIndex = '10000';
-            pre.textContent = 'Error: ' + e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '');
-            document.body.appendChild(pre);
-        });
-    </script>
+  <div id="hud">
+    <header id="topbar">
+      <div class="brand">// ORBITAL FLIGHT CONSOLE //</div>
+      <div class="clock">MET <span id="met">T+00:00:00</span></div>
+      <div class="warp" id="warp-box">WARP <span id="warp">1×</span></div>
+    </header>
+
+    <section class="panel" id="left-panel">
+      <div class="module">
+        <div class="module-title">Flight Data</div>
+        <div class="row"><span>ALTITUDE</span><b id="alt">—</b></div>
+        <div class="row"><span>VELOCITY</span><b id="vel">—</b></div>
+        <div class="row"><span>APOAPSIS</span><b id="apo">—</b></div>
+        <div class="row"><span>PERIAPSIS</span><b id="peri">—</b></div>
+      </div>
+      <div class="module">
+        <div class="module-title">Orbit</div>
+        <div class="row"><span>ECCENTRICITY</span><b id="ecc">—</b></div>
+        <div class="row"><span>INCLINATION</span><b id="inc">—</b></div>
+        <div class="row"><span>PERIOD</span><b id="period">—</b></div>
+        <div class="row"><span>SEMI-MAJOR</span><b id="sma">—</b></div>
+      </div>
+    </section>
+
+    <section class="panel" id="right-panel">
+      <div class="module">
+        <div class="module-title">Vehicle</div>
+        <div class="row"><span>SAS</span><b id="sas" class="off">OFF</b></div>
+        <div class="row"><span>ENGINE</span><b id="engine" class="off">IDLE</b></div>
+        <div class="row"><span>&Delta;V REMAINING</span><b id="dv">—</b></div>
+        <div class="bar-row"><span>THR</span><div class="bar"><div id="throttle-bar"></div></div><b id="throttle-pct">100%</b></div>
+        <div class="bar-row"><span>FUEL</span><div class="bar"><div id="fuel-bar"></div></div><b id="fuel-pct">100%</b></div>
+      </div>
+      <div class="module">
+        <div class="module-title">Mission</div>
+        <ol id="mission-list"></ol>
+      </div>
+    </section>
+
+    <div id="notify"></div>
+
+    <div id="help">
+      <div class="module">
+        <div class="module-title">Controls — [H] to hide</div>
+        <div class="help-grid">
+          <span>W / S</span><span>pitch</span>
+          <span>A / D</span><span>yaw</span>
+          <span>Q / E</span><span>roll</span>
+          <span>SPACE</span><span>fire engine</span>
+          <span>SHIFT / CTRL</span><span>throttle ± &nbsp; (Z max, X cut)</span>
+          <span>T</span><span>SAS (kill rotation)</span>
+          <span>, / .</span><span>time warp − / +</span>
+          <span>R</span><span>reset flight</span>
+          <span>MOUSE</span><span>orbit camera / wheel zoom</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="scanlines"></div>
+  <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
