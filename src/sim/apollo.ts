@@ -1,6 +1,7 @@
 import { Quaternion, Vector3 } from 'three';
-import { MOON, SHIP } from '../constants';
+import { MOON } from '../constants';
 import { MOON_BODY } from './bodies';
+import { G0 } from './vehicles';
 import type { Simulation } from './simulation';
 
 export type HoldMode =
@@ -117,7 +118,7 @@ export class ApolloOps {
 
     if (!this.burn) return false;
 
-    const delivered = SHIP.isp * SHIP.g0 * Math.log(this.burn.massBefore / sim.ship.mass);
+    const delivered = sim.ship.stage.isp * G0 * Math.log(this.burn.massBefore / sim.ship.mass);
     const remaining = this.burn.totalDv - delivered;
     if (remaining <= 0.5 || sim.ship.fuel <= 0) {
       this.events.push(
@@ -131,7 +132,7 @@ export class ApolloOps {
       return false;
     }
     // Feather the final moments so we don't overshoot the solved ΔV.
-    const fullAccel = (SHIP.thrust / sim.ship.mass) * frameDt;
+    const fullAccel = (sim.ship.stage.thrust / sim.ship.mass) * frameDt;
     sim.ship.throttle = Math.min(1, Math.max(0.05, remaining / Math.max(fullAccel, 1e-6)));
     return true;
   }
