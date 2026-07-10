@@ -1,10 +1,14 @@
 # ORBITAL — Vector Flight Console
 
-A retro CRT vector-display orbital mechanics game. Fly an Apollo-style CSM on real
-patched-conic physics: run the Earth-orbit training program (raise apoapsis,
-circularize, deorbit, survive reentry), or plan maneuver nodes, burn TLI, coast to
-the Moon's sphere of influence, and capture into lunar orbit — over a coastline
-vector Earth and the real HYG night sky.
+A retro CRT vector-display orbital mechanics game. Fly the full Apollo stack on
+real patched-conic physics: burn TLI on the S-IVB, capture into lunar orbit,
+undock the LM, fly a powered descent to a surface touchdown, stage, ride the APS
+back up, rendezvous and dock with the CSM, and burn for home — or just run the
+Earth-orbit training program. All over a coastline vector Earth and the real HYG
+night sky.
+
+Keys for the lunar arc: **V** swaps CSM ↔ LM when separated; the Vehicle panel
+has UNDOCK / DOCK / STAGE. Docking needs <300 m and <3 m/s closing.
 
 ## Run
 

@@ -1,5 +1,17 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [3.1.0] - 2026-07-09 — Full Apollo stack
+
+### Added
+- CSM and LM as two independently simulated craft (the inactive one coasts on
+  Kepler rails); V swaps control when separated
+- Undock / hard dock with range + relative-velocity gating; crew transfer and
+  LM jettison after an ascent rendezvous
+- Stage-aware vehicles: CSM = S-IVB (real J-2 numbers, flies TLI, staged away)
+  + SPS; LM = DPS descent + APS ascent stages (game-tuned margins)
+- Lunar surface touchdown (<8 m/s on airless bodies), liftoff TWR gating
+- LM and S-IVB vector meshes, vehicle ops buttons, target dist/rel-vel readout
+
 ## [3.0.0] - 2026-07-09 — The merge
 
 Unified the two lineages: the Apollo simulator's feature depth (main, Feb–May 2026)
