@@ -2,6 +2,8 @@ import { Vector3 } from 'three';
 import { ATMOSPHERE, EARTH } from '../constants';
 
 export interface OrbitalElements {
+  /** Gravitational parameter of the primary these elements are relative to. */
+  mu: number;
   eccentricity: number;
   semiMajorAxis: number; // m
   periapsis: number; // m from center
@@ -20,9 +22,9 @@ export interface OrbitalElements {
 
 const TWO_PI = Math.PI * 2;
 
-export function gravityAccel(pos: Vector3): Vector3 {
+export function gravityAccel(pos: Vector3, mu = EARTH.mu): Vector3 {
   const r = pos.length();
-  return pos.clone().multiplyScalar(-EARTH.mu / (r * r * r));
+  return pos.clone().multiplyScalar(-mu / (r * r * r));
 }
 
 /** Exponential-atmosphere drag acceleration; zero above the ceiling. */
@@ -45,8 +47,9 @@ export function rk4Step(
   vel: Vector3,
   dt: number,
   extraAccel: (p: Vector3, v: Vector3) => Vector3,
+  mu = EARTH.mu,
 ): void {
-  const a = (p: Vector3, v: Vector3) => gravityAccel(p).add(extraAccel(p, v));
+  const a = (p: Vector3, v: Vector3) => gravityAccel(p, mu).add(extraAccel(p, v));
 
   const k1v = a(pos, vel);
   const k1p = vel.clone();
@@ -64,8 +67,7 @@ export function rk4Step(
   vel.addScaledVector(k1v.add(k2v.multiplyScalar(2)).add(k3v.multiplyScalar(2)).add(k4v), dt / 6);
 }
 
-export function elementsFromState(pos: Vector3, vel: Vector3): OrbitalElements {
-  const mu = EARTH.mu;
+export function elementsFromState(pos: Vector3, vel: Vector3, mu = EARTH.mu): OrbitalElements {
   const r = pos.length();
   const v = vel.length();
 
@@ -119,7 +121,7 @@ export function elementsFromState(pos: Vector3, vel: Vector3): OrbitalElements {
   let trueAnomaly = Math.atan2(pos.dot(qHat), pos.dot(eHat));
   if (trueAnomaly < 0) trueAnomaly += TWO_PI;
 
-  return { eccentricity: ecc, semiMajorAxis: sma, periapsis, apoapsis, period, inclination, ascendingNode, argOfPeriapsis, trueAnomaly, hVec, eHat, qHat };
+  return { mu, eccentricity: ecc, semiMajorAxis: sma, periapsis, apoapsis, period, inclination, ascendingNode, argOfPeriapsis, trueAnomaly, hVec, eHat, qHat };
 }
 
 /** Position (and optionally velocity) in world space at a given true anomaly. */
@@ -179,7 +181,7 @@ export function solveKepler(M: number, e: number): number {
 
 /** Mean motion, rad/s. */
 export function meanMotion(el: OrbitalElements): number {
-  return Math.sqrt(EARTH.mu / Math.pow(el.semiMajorAxis, 3));
+  return Math.sqrt(el.mu / Math.pow(el.semiMajorAxis, 3));
 }
 
 function clamp(x: number, lo: number, hi: number): number {

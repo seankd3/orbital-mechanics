@@ -7,6 +7,12 @@ export interface RotationInput {
   roll: number;
 }
 
+export interface TranslationInput {
+  x: number; // -1..1, body frame (right +)
+  y: number; // (up +)
+  z: number; // (forward +)
+}
+
 const ANGULAR_ACCEL = 0.9; // rad/s²
 const SAS_DAMPING = 6; // 1/s exponential kill-rotation rate
 
@@ -20,12 +26,15 @@ export class Spacecraft {
   readonly angularVelocity = new Vector3();
 
   fuel = SHIP.fuelMass; // kg
+  rcsFuel = SHIP.rcsFuelMass; // kg
   throttle = 1; // 0..1
   firing = false;
   sas = false;
+  /** Body-frame RCS translation command for this frame, set by input. */
+  readonly rcsCommand = new Vector3();
 
   get mass(): number {
-    return SHIP.dryMass + this.fuel;
+    return SHIP.dryMass + this.fuel + this.rcsFuel;
   }
 
   /** Remaining delta-v via Tsiolkovsky, m/s. */
@@ -48,6 +57,22 @@ export class Spacecraft {
     if (!this.firing || this.throttle <= 0 || this.fuel <= 0) return;
     const mdot = (SHIP.thrust * this.throttle) / (SHIP.isp * SHIP.g0);
     this.fuel = Math.max(0, this.fuel - mdot * dt);
+  }
+
+  /** RCS translation acceleration in world space right now (zero when idle/dry). */
+  get rcsAccel(): Vector3 {
+    if (this.rcsFuel <= 0 || this.rcsCommand.lengthSq() < 1e-6) return new Vector3();
+    return this.rcsCommand
+      .clone()
+      .normalize()
+      .applyQuaternion(this.quaternion)
+      .multiplyScalar(SHIP.rcsThrust / this.mass);
+  }
+
+  consumeRcsFuel(dt: number): void {
+    if (this.rcsFuel <= 0 || this.rcsCommand.lengthSq() < 1e-6) return;
+    const mdot = SHIP.rcsThrust / (SHIP.rcsIsp * SHIP.g0);
+    this.rcsFuel = Math.max(0, this.rcsFuel - mdot * dt);
   }
 
   applyRotationInput(input: RotationInput, dt: number): void {
@@ -76,9 +101,11 @@ export class Spacecraft {
     this.velocity.copy(velocity);
     this.angularVelocity.set(0, 0, 0);
     this.fuel = SHIP.fuelMass;
+    this.rcsFuel = SHIP.rcsFuelMass;
     this.throttle = 1;
     this.firing = false;
     this.sas = false;
+    this.rcsCommand.set(0, 0, 0);
     // Face prograde.
     this.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), velocity.clone().normalize());
   }
