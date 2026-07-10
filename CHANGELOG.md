@@ -1,12 +1,46 @@
 # Orbital Mechanics Simulator - Changelog
 
-## [1.7.0] - 2025-04-01
+## [3.0.0] - 2026-07-09 — The merge
+
+Unified the two lineages: the Apollo simulator's feature depth (main, Feb–May 2026)
+rebuilt on the v2 Vite + TypeScript architecture.
+
+### Added (ported from the Apollo build)
+- Kinematic Moon with patched-conic SOI handoff — fly TLI, get captured, come home
+- Maneuver node planner: TIG at now/AP/PE, prograde/normal/radial ΔV, predicted
+  orbit line, auto-align, finite Tsiolkovsky-metered burns centered on TIG
+- Apollo orbit-ops panel: attitude holds (PRO/RETRO/RAD±/NRM±), solved TLI and
+  CIRC burns, fixed LOI/TEI, Earth/Moon checkpoints, orbit guard (GO/PE LOW/ESCAPE)
+- Canvas navball with orbital-frame markers, horizon arcs, and maneuver cue
+- MAP mode (M): orthographic view down the orbit normal
+- Real night sky: HYG catalog (~8,900 stars, magnitude/B-V driven)
+- Natural Earth 50m coastlines on the vector globe; crater-ringed vector Moon
+- Synthesized cabin audio: SPS rumble, RCS pops, low-fuel master alarm
+- RCS translation (I/K J/L U/O) with its own propellant budget
+
+### Changed
+- Tank and thrust sized for the full lunar arc (~5,970 m/s Δv, 400 kN)
+- Not ported (dormant in the Apollo build too): checklists, lessons, failures,
+  profiles, rendezvous planner, entry guidance — staged for later
+
+## [2.0.0] - 2026-07-09 — Full rebuild
+
+### Changed
+- Rebuilt from scratch as a Vite + TypeScript ES-module app (was CDN script tags + globals on Three.js r132)
+- Simulation now runs in true SI units with an RK4 integrator; render space is scaled separately
+- Time warp up to 100,000×: numeric integration through 100×, exact on-rails Kepler propagation above (zero drift)
+- Retro CRT vector aesthetic pushed further: phosphor graticule Earth, thin atmospheric limb glow, bloom + chromatic-fringe/vignette shader pass, CSS scanlines
 
 ### Added
-- Added screen space glow effect to mimic a CRT vector display
-  - Implemented using UnrealBloomPass from Three.js examples
-  - Updated createEdgedMesh in js/spacecraft.js and createPlanetMesh in js/planet.js to use THREE.MeshBasicMaterial with emissive properties
-  - Updated index.html to include the new UnrealBloomPass script from Three.js examples
+- Fuel and delta-v budget (Tsiolkovsky), throttle control (Shift/Ctrl, Z/X)
+- Exponential atmosphere below 140 km with drag — deorbits actually decay now
+- Mission objectives: raise apoapsis → circularize → deorbit → reentry, ending in splashdown (or a crash if you skip steps)
+- Orbit prediction line with periapsis/apoapsis markers, handles hyperbolic arcs
+- Warp auto-cancel on manual control input and at atmospheric interface
+- Notifications, mission log, and a redesigned green-phosphor HUD
+
+### Removed
+- Legacy `js/` global-namespace modules and CDN Three.js dependency
 
 ## [1.6.0] - 2025-03-30
 
@@ -146,3 +180,11 @@
 - Implemented proper orbital mechanics for spacecraft
 - Created orbital information display in UI
 - Added spacecraft controls and visuals
+
+## [1.7.0] - 2025-04-01
+
+### Added
+- Added screen space glow effect to mimic a CRT vector display
+  - Implemented using UnrealBloomPass from Three.js examples
+  - Updated createEdgedMesh in js/spacecraft.js and createPlanetMesh in js/planet.js to use THREE.MeshBasicMaterial with emissive properties
+  - Updated index.html to include the new UnrealBloomPass script from Three.js examples
