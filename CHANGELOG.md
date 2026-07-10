@@ -1,5 +1,28 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [3.0.0] - 2026-07-09 — The merge
+
+Unified the two lineages: the Apollo simulator's feature depth (main, Feb–May 2026)
+rebuilt on the v2 Vite + TypeScript architecture.
+
+### Added (ported from the Apollo build)
+- Kinematic Moon with patched-conic SOI handoff — fly TLI, get captured, come home
+- Maneuver node planner: TIG at now/AP/PE, prograde/normal/radial ΔV, predicted
+  orbit line, auto-align, finite Tsiolkovsky-metered burns centered on TIG
+- Apollo orbit-ops panel: attitude holds (PRO/RETRO/RAD±/NRM±), solved TLI and
+  CIRC burns, fixed LOI/TEI, Earth/Moon checkpoints, orbit guard (GO/PE LOW/ESCAPE)
+- Canvas navball with orbital-frame markers, horizon arcs, and maneuver cue
+- MAP mode (M): orthographic view down the orbit normal
+- Real night sky: HYG catalog (~8,900 stars, magnitude/B-V driven)
+- Natural Earth 50m coastlines on the vector globe; crater-ringed vector Moon
+- Synthesized cabin audio: SPS rumble, RCS pops, low-fuel master alarm
+- RCS translation (I/K J/L U/O) with its own propellant budget
+
+### Changed
+- Tank and thrust sized for the full lunar arc (~5,970 m/s Δv, 400 kN)
+- Not ported (dormant in the Apollo build too): checklists, lessons, failures,
+  profiles, rendezvous planner, entry guidance — staged for later
+
 ## [2.0.0] - 2026-07-09 — Full rebuild
 
 ### Changed
