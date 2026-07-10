@@ -70,7 +70,7 @@ export function createPlanet(): Group {
 
 /** Natural Earth 50m coastlines as phosphor line segments, loaded async. */
 function loadCoastlines(group: Group): void {
-  fetch('/data/ne_50m_coastline.json')
+  fetch(`${import.meta.env.BASE_URL}data/ne_50m_coastline.json`)
     .then((r) => r.json())
     .then((geo: { features: { geometry: { type: string; coordinates: unknown } }[] }) => {
       const segments: number[] = [];
