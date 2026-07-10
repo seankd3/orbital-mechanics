@@ -12,12 +12,13 @@
     <header id="topbar">
       <div class="brand">// ORBITAL FLIGHT CONSOLE //</div>
       <div class="clock">MET <span id="met">T+00:00:00</span></div>
-      <div class="warp" id="warp-box">WARP <span id="warp">1×</span></div>
+      <div class="warp" id="warp-box">WARP <span id="warp">1×</span> <span id="cam-mode"></span></div>
     </header>
 
     <section class="panel" id="left-panel">
       <div class="module">
         <div class="module-title">Flight Data</div>
+        <div class="row"><span>BODY</span><b id="body">EARTH</b></div>
         <div class="row"><span>ALTITUDE</span><b id="alt">—</b></div>
         <div class="row"><span>VELOCITY</span><b id="vel">—</b></div>
         <div class="row"><span>APOAPSIS</span><b id="apo">—</b></div>
@@ -28,7 +29,31 @@
         <div class="row"><span>ECCENTRICITY</span><b id="ecc">—</b></div>
         <div class="row"><span>INCLINATION</span><b id="inc">—</b></div>
         <div class="row"><span>PERIOD</span><b id="period">—</b></div>
-        <div class="row"><span>SEMI-MAJOR</span><b id="sma">—</b></div>
+        <div class="row"><span>TO AP / TO PE</span><b><span id="tap">—</span> / <span id="tpe">—</span></b></div>
+        <div class="row"><span>STATUS</span><b id="guard">GO</b></div>
+      </div>
+      <div class="module">
+        <div class="module-title">Orbit Ops</div>
+        <div class="row"><span>GUIDANCE</span><b id="guidance">MANUAL</b></div>
+        <div class="btn-grid" id="ops-holds">
+          <button data-hold="prograde">PRO</button>
+          <button data-hold="retrograde">RETRO</button>
+          <button data-hold="radial-out">RAD+</button>
+          <button data-hold="radial-in">RAD−</button>
+          <button data-hold="normal-plus">NRM+</button>
+          <button data-hold="normal-minus">NRM−</button>
+        </div>
+        <div class="btn-grid" id="ops-burns">
+          <button data-burn="tli">TLI</button>
+          <button data-burn="circ">CIRC</button>
+          <button data-burn="loi">LOI</button>
+          <button data-burn="tei">TEI</button>
+          <button data-burn="off" class="warn-btn">OFF</button>
+        </div>
+        <div class="btn-grid" id="ops-checkpoints">
+          <button data-checkpoint="earth">CKPT EARTH</button>
+          <button data-checkpoint="moon">CKPT MOON</button>
+        </div>
       </div>
     </section>
 
@@ -40,6 +65,53 @@
         <div class="row"><span>&Delta;V REMAINING</span><b id="dv">—</b></div>
         <div class="bar-row"><span>THR</span><div class="bar"><div id="throttle-bar"></div></div><b id="throttle-pct">100%</b></div>
         <div class="bar-row"><span>FUEL</span><div class="bar"><div id="fuel-bar"></div></div><b id="fuel-pct">100%</b></div>
+        <div class="bar-row"><span>RCS</span><div class="bar"><div id="rcs-bar"></div></div><b id="rcs-pct">100%</b></div>
+      </div>
+      <div class="module" id="node-module">
+        <div class="module-title">Maneuver Node — [N]</div>
+        <div class="row"><span>STATE</span><b id="node-state">NO NODE</b></div>
+        <div class="row"><span>&Delta;V TOTAL</span><b id="node-total">0 m/s</b></div>
+        <div class="row"><span>TIG T−</span><b id="node-tig">—</b></div>
+        <div class="row"><span>BURN EST</span><b id="node-burn">—</b></div>
+        <div class="row"><span>ALIGN ERR</span><b id="node-align">—</b></div>
+        <div class="row"><span>PRED AP / PE</span><b><span id="node-ap">—</span> / <span id="node-pe">—</span></b></div>
+        <div class="node-row"><span>TIG</span>
+          <button data-node-time="-300">−5M</button>
+          <button data-node-time="-60">−1M</button>
+          <button data-node-time="60">+1M</button>
+          <button data-node-time="300">+5M</button>
+        </div>
+        <div class="node-row"><span>AT</span>
+          <button data-node-at="now">NOW</button>
+          <button data-node-at="ap">AP</button>
+          <button data-node-at="pe">PE</button>
+        </div>
+        <div class="node-row"><span>PRO</span>
+          <button data-node-axis="prograde" data-node-delta="-10">−10</button>
+          <button data-node-axis="prograde" data-node-delta="-1">−1</button>
+          <b id="node-pro">+0</b>
+          <button data-node-axis="prograde" data-node-delta="1">+1</button>
+          <button data-node-axis="prograde" data-node-delta="10">+10</button>
+        </div>
+        <div class="node-row"><span>NRM</span>
+          <button data-node-axis="normal" data-node-delta="-10">−10</button>
+          <button data-node-axis="normal" data-node-delta="-1">−1</button>
+          <b id="node-nrm">+0</b>
+          <button data-node-axis="normal" data-node-delta="1">+1</button>
+          <button data-node-axis="normal" data-node-delta="10">+10</button>
+        </div>
+        <div class="node-row"><span>RAD</span>
+          <button data-node-axis="radial" data-node-delta="-10">−10</button>
+          <button data-node-axis="radial" data-node-delta="-1">−1</button>
+          <b id="node-rad">+0</b>
+          <button data-node-axis="radial" data-node-delta="1">+1</button>
+          <button data-node-axis="radial" data-node-delta="10">+10</button>
+        </div>
+        <div class="node-row">
+          <button data-node-cmd="create">CREATE</button>
+          <button data-node-cmd="execute" class="go-btn">BURN [B]</button>
+          <button data-node-cmd="clear" class="warn-btn">CLEAR</button>
+        </div>
       </div>
       <div class="module">
         <div class="module-title">Mission</div>
@@ -53,12 +125,14 @@
       <div class="module">
         <div class="module-title">Controls — [H] to hide</div>
         <div class="help-grid">
-          <span>W / S</span><span>pitch</span>
-          <span>A / D</span><span>yaw</span>
-          <span>Q / E</span><span>roll</span>
+          <span>W/S A/D Q/E</span><span>pitch / yaw / roll</span>
+          <span>I/K J/L U/O</span><span>RCS translate</span>
           <span>SPACE</span><span>fire engine</span>
           <span>SHIFT / CTRL</span><span>throttle ± &nbsp; (Z max, X cut)</span>
           <span>T</span><span>SAS (kill rotation)</span>
+          <span>N / B</span><span>maneuver node / execute burn</span>
+          <span>[ ] / { }</span><span>node &Delta;V / node TIG</span>
+          <span>M</span><span>map view</span>
           <span>, / .</span><span>time warp − / +</span>
           <span>R</span><span>reset flight</span>
           <span>MOUSE</span><span>orbit camera / wheel zoom</span>
