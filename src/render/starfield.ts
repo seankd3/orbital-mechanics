@@ -16,7 +16,7 @@ import {
 export function createStarfield(radius = 120_000): Group {
   const group = new Group();
 
-  fetch('/data/star_catalog.json')
+  fetch(`${import.meta.env.BASE_URL}data/star_catalog.json`)
     .then((r) => r.json())
     .then((catalog: [number, number, number, number][]) => {
       group.add(buildLayer(catalog.filter(([, , m]) => m <= 2.5), radius, 2.6));
