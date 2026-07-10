@@ -1,4 +1,3 @@
-import { SHIP } from '../constants';
 import { orbitGuardLabel } from '../sim/apollo';
 import { meanMotion, trueToMeanAnomaly } from '../sim/physics';
 import type { MissionLog } from '../sim/missions';
@@ -20,6 +19,10 @@ export class Hud {
   private readonly tpe = el('tpe');
   private readonly guard = el('guard');
   private readonly guidance = el('guidance');
+  private readonly craft = el('craft');
+  private readonly fuelLabel = el('fuel-label');
+  private readonly tgtDist = el('tgt-dist');
+  private readonly tgtRvel = el('tgt-rvel');
   private readonly sas = el('sas');
   private readonly engine = el('engine');
   private readonly dv = el('dv');
@@ -73,27 +76,43 @@ export class Hud {
     this.guidance.textContent = sim.apollo.statusLabel;
     this.guidance.className = sim.apollo.statusLabel === 'MANUAL' ? 'off' : 'hot';
 
+    this.craft.textContent = sim.docked && sim.lmAlive
+      ? 'CSM+LM'
+      : `${ship.spec.label}${ship.landed ? ' · SURFACE' : ''}`;
+    this.craft.className = sim.activeId === 'lm' ? 'hot' : '';
+
     this.sas.textContent = ship.sas ? 'ON' : 'OFF';
     this.sas.className = ship.sas ? 'on' : 'off';
 
     if (ship.fuel <= 0) {
-      this.engine.textContent = 'DRY';
+      this.engine.textContent = `${ship.stage.name} DRY`;
       this.engine.className = 'bad';
     } else if (ship.firing) {
-      this.engine.textContent = 'BURN';
+      this.engine.textContent = `${ship.stage.name} BURN`;
       this.engine.className = 'hot';
     } else {
-      this.engine.textContent = 'IDLE';
+      this.engine.textContent = `${ship.stage.name} IDLE`;
       this.engine.className = 'off';
     }
 
     this.dv.textContent = fmtSpeed(ship.deltaV);
     this.throttleBar.style.width = `${Math.round(ship.throttle * 100)}%`;
     this.throttlePct.textContent = `${Math.round(ship.throttle * 100)}%`;
-    this.fuelBar.style.width = `${Math.round((ship.fuel / SHIP.fuelMass) * 100)}%`;
-    this.fuelPct.textContent = `${Math.round((ship.fuel / SHIP.fuelMass) * 100)}%`;
-    this.rcsBar.style.width = `${Math.round((ship.rcsFuel / SHIP.rcsFuelMass) * 100)}%`;
-    this.rcsPct.textContent = `${Math.round((ship.rcsFuel / SHIP.rcsFuelMass) * 100)}%`;
+    this.fuelLabel.textContent = ship.stage.name;
+    const fuelFrac = ship.fuel / ship.stage.fuelMass;
+    this.fuelBar.style.width = `${Math.round(fuelFrac * 100)}%`;
+    this.fuelPct.textContent = `${Math.round(fuelFrac * 100)}%`;
+    const rcsFrac = ship.rcsFuel / ship.spec.rcsFuelMass;
+    this.rcsBar.style.width = `${Math.round(rcsFrac * 100)}%`;
+    this.rcsPct.textContent = `${Math.round(rcsFrac * 100)}%`;
+
+    const tgt = sim.target;
+    if (tgt) {
+      this.tgtDist.textContent = fmtDistance(tgt.distance);
+      this.tgtRvel.textContent = isNaN(tgt.relVel) ? 'LANDED' : `${tgt.relVel.toFixed(1)} m/s`;
+    } else {
+      this.tgtDist.textContent = this.tgtRvel.textContent = '—';
+    }
 
     this.met.textContent = fmtMet(sim.met);
     this.warp.textContent = fmtWarp(sim.warp);
@@ -119,7 +138,7 @@ export class Hud {
     this.node.state.className = p.burnActive ? 'hot' : p.armed ? 'on' : '';
     this.node.total.textContent = fmtSpeed(p.totalDv);
     this.node.tig.textContent = fmtPeriod(Math.max(0, p.timeToNode(sim)));
-    this.node.burn.textContent = `${p.estimateBurnTime(sim.ship.mass).toFixed(0)} s`;
+    this.node.burn.textContent = `${p.estimateBurnTime(sim.ship).toFixed(0)} s`;
     this.node.align.textContent = `${p.alignmentErrorDeg(sim).toFixed(1)}°`;
     const R = sim.primary.radius;
     if (p.predicted) {

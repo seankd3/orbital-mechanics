@@ -1,5 +1,6 @@
 import { Quaternion, Vector3 } from 'three';
-import { SHIP } from '../constants';
+import { G0 } from './vehicles';
+import type { Spacecraft } from './spacecraft';
 import {
   elementsFromState,
   meanMotion,
@@ -131,11 +132,11 @@ export class ManeuverPlanner {
     this.predicted = elementsFromState(position, velocity);
   }
 
-  /** Full-throttle SPS burn duration for the node's ΔV at current mass. */
-  estimateBurnTime(mass: number): number {
-    const ve = SHIP.isp * SHIP.g0;
-    const propellant = mass * (1 - Math.exp(-this.totalDv / ve));
-    const mdot = SHIP.thrust / ve;
+  /** Full-throttle burn duration for the node's ΔV on the craft's engine. */
+  estimateBurnTime(ship: Spacecraft): number {
+    const ve = ship.stage.isp * G0;
+    const propellant = ship.mass * (1 - Math.exp(-this.totalDv / ve));
+    const mdot = ship.stage.thrust / ve;
     return propellant / mdot;
   }
 
@@ -174,7 +175,7 @@ export class ManeuverPlanner {
     if (this.autoAlign && !this.burnActive) this.stepAlign(sim, frameDt);
 
     if (this.armed && !this.burnActive) {
-      const halfBurn = this.estimateBurnTime(ship.mass) / 2;
+      const halfBurn = this.estimateBurnTime(ship) / 2;
       if (this.timeToNode(sim) <= halfBurn) {
         if (sim.warp > 1) {
           sim.setWarpIndex(0);
@@ -192,14 +193,14 @@ export class ManeuverPlanner {
 
     if (this.burnActive) {
       this.stepAlign(sim, frameDt);
-      const delivered = SHIP.isp * SHIP.g0 * Math.log(this.burnMassBefore / ship.mass);
+      const delivered = ship.stage.isp * G0 * Math.log(this.burnMassBefore / ship.mass);
       const remaining = this.burnTotalDv - delivered;
       if (remaining <= 0.05 || ship.fuel <= 0) {
         this.finishBurn(sim, ship.fuel <= 0);
         return false;
       }
       // Feather the throttle for the last moments so we don't overshoot.
-      const fullAccel = (SHIP.thrust / ship.mass) * frameDt;
+      const fullAccel = (ship.stage.thrust / ship.mass) * frameDt;
       ship.throttle = Math.min(1, Math.max(0.05, remaining / Math.max(fullAccel, 1e-6)));
       return true;
     }

@@ -12,6 +12,7 @@ import { ApolloOps } from './apollo';
 import { EARTH_BODY, MOON_BODY, type Body } from './bodies';
 import { ManeuverPlanner } from './maneuver';
 import { Spacecraft, type RotationInput, type TranslationInput } from './spacecraft';
+import type { VehicleId } from './vehicles';
 import {
   dragAccel,
   elementsFromState,
@@ -31,32 +32,55 @@ interface RailsState {
   time0: number;
 }
 
+const DOCK_RANGE = 300; // m
+const DOCK_MAX_RELVEL = 3; // m/s
+const TOUCHDOWN_SPEED = 8; // m/s — gentler than this on an airless body = landed
+
 /**
- * Patched-conic, one-primary-at-a-time simulation (Apollo-build model):
- * ship state is stored RELATIVE to the current primary. The Moon flies a
- * kinematic circular ephemeris; crossing its SOI hands the ship over.
+ * Patched-conic, one-primary-at-a-time simulation flying a full Apollo
+ * stack: CSM and LM as independent craft. The active craft integrates
+ * numerically; the inactive one coasts on Kepler rails (or sits landed).
  */
 export class Simulation {
-  readonly ship = new Spacecraft();
+  readonly csm = new Spacecraft('csm');
+  readonly lm = new Spacecraft('lm');
   readonly planner = new ManeuverPlanner();
   readonly apollo = new ApolloOps();
+
+  activeId: VehicleId = 'csm';
+  /** CSM and LM mated — the stack flies as one on the CSM's engine. */
+  docked = true;
+  /** LM exists (false after post-rendezvous jettison or abandonment). */
+  lmAlive = true;
+
   /** Mission elapsed time, seconds. */
   met = 0;
   warpIndex = 0;
   status: FlightStatus = 'flying';
   primary: Body = EARTH_BODY;
   elements: OrbitalElements;
-  /** Set by the loop for one frame when something noteworthy happens. */
   events: string[] = [];
   /** When true, reaching Earth's surface counts as a splashdown, not a crash. */
   recoverable = false;
 
   private rails: RailsState | null = null;
+  private inactiveRails: RailsState | null = null;
   private wasInAtmosphere = false;
 
   constructor() {
-    this.elements = elementsFromState(this.ship.position, this.ship.velocity);
+    this.elements = elementsFromState(this.csm.position, this.csm.velocity);
     this.reset();
+  }
+
+  /** The craft under manual control. */
+  get ship(): Spacecraft {
+    return this.activeId === 'csm' ? this.csm : this.lm;
+  }
+
+  /** The other craft, when it's flying free. */
+  get inactive(): Spacecraft | null {
+    if (this.docked || !this.lmAlive) return null;
+    return this.activeId === 'csm' ? this.lm : this.csm;
   }
 
   get warp(): number {
@@ -67,9 +91,24 @@ export class Simulation {
     return this.ship.position.length() - this.primary.radius;
   }
 
-  /** Ship position in Earth-centered inertial space (render frame). */
+  /** Active-craft position in Earth-centered inertial space (render frame). */
   get absolutePosition(): Vector3 {
     return this.primary.positionAt(this.met).add(this.ship.position);
+  }
+
+  /** Distance / closing info to the other craft, when separated. */
+  get target(): { distance: number; relVel: number } | null {
+    const other = this.inactive;
+    if (!other || other.landed) {
+      if (other?.landed) {
+        return { distance: this.ship.position.distanceTo(other.position), relVel: NaN };
+      }
+      return null;
+    }
+    return {
+      distance: this.ship.position.distanceTo(other.position),
+      relVel: this.ship.velocity.distanceTo(other.velocity),
+    };
   }
 
   reset(): void {
@@ -77,10 +116,11 @@ export class Simulation {
     const r = EARTH.radius + START_ORBIT.altitude;
     const v = Math.sqrt(EARTH.mu / r);
     const inc = START_ORBIT.inclination;
-    // Start over the equator heading into an inclined, prograde circular orbit.
     const position = new Vector3(r, 0, 0);
     const velocity = new Vector3(0, v * Math.sin(inc), -v * Math.cos(inc));
-    this.ship.reset(position, velocity);
+    this.csm.reset(position, velocity);
+    this.lm.reset(position, velocity);
+    this.mateStack();
     this.planner.clear();
     this.apollo.clearGuidance(true);
     this.met = 0;
@@ -88,25 +128,113 @@ export class Simulation {
     this.status = 'flying';
     this.recoverable = false;
     this.rails = null;
+    this.inactiveRails = null;
     this.wasInAtmosphere = false;
     this.elements = elementsFromState(position, velocity);
   }
 
-  /** Teleport checkpoint: circular orbit around the given body (Apollo-style). */
+  /** Teleport checkpoint: full docked stack in a circular orbit. */
   setCircularOrbit(body: Body, altitude: number, inclination = 0): void {
     this.primary = body;
     const r = body.radius + altitude;
     const v = Math.sqrt(body.mu / r);
     const position = new Vector3(r, 0, 0);
     const velocity = new Vector3(0, v * Math.sin(inclination), -v * Math.cos(inclination));
-    this.ship.reset(position, velocity);
+    this.csm.reset(position, velocity);
+    this.lm.reset(position, velocity);
+    this.mateStack();
     this.planner.clear();
     this.apollo.clearGuidance(true);
     this.status = 'flying';
     this.rails = null;
+    this.inactiveRails = null;
     this.warpIndex = 0;
     this.elements = elementsFromState(position, velocity, body.mu);
     this.events.push(`CHECKPOINT — ${body.name} ORBIT ${Math.round(altitude / 1000)} KM`);
+  }
+
+  private mateStack(): void {
+    this.activeId = 'csm';
+    this.docked = true;
+    this.lmAlive = true;
+    this.csm.attachedMass = this.lm.ownMass;
+  }
+
+  /** Crew into the LM, springs push it clear. The LM becomes active. */
+  undock(): void {
+    if (!this.docked || !this.lmAlive || this.status !== 'flying') return;
+    const fwd = this.csm.forward;
+    this.lm.position.copy(this.csm.position).addScaledVector(fwd, 30);
+    this.lm.velocity.copy(this.csm.velocity).addScaledVector(fwd, 0.4);
+    this.lm.quaternion.copy(this.csm.quaternion);
+    this.lm.angularVelocity.set(0, 0, 0);
+    this.csm.attachedMass = 0;
+    this.docked = false;
+    this.activeId = 'lm';
+    this.onActiveChanged();
+    this.cacheInactiveRails();
+    this.events.push('LM UNDOCKED — YOU ARE THE EAGLE');
+  }
+
+  /** Hard-dock when close and slow. Ascent-stage returns get jettisoned. */
+  dock(): void {
+    if (this.docked || !this.lmAlive || this.status !== 'flying') return;
+    const t = this.target;
+    if (!t || isNaN(t.relVel)) return;
+    if (t.distance > DOCK_RANGE || t.relVel > DOCK_MAX_RELVEL) {
+      this.events.push(
+        `DOCKING ABORT — NEED <${DOCK_RANGE} M AND <${DOCK_MAX_RELVEL} M/S (${Math.round(t.distance)} M, ${t.relVel.toFixed(1)} M/S)`,
+      );
+      return;
+    }
+    // The CSM is the living room: control returns there.
+    this.activeId = 'csm';
+    this.docked = true;
+    if (this.lm.stagesDropped > 0) {
+      // Post-rendezvous: crew transfers, spent ascent stage is cut loose.
+      this.lmAlive = false;
+      this.csm.attachedMass = 0;
+      this.events.push('HARD DOCK — CREW TRANSFERRED, LM JETTISONED');
+    } else {
+      this.csm.attachedMass = this.lm.ownMass;
+      this.events.push('HARD DOCK — STACK MATED');
+    }
+    this.inactiveRails = null;
+    this.onActiveChanged();
+  }
+
+  /** Swap control between separated craft. */
+  switchCraft(): void {
+    const other = this.inactive;
+    if (!other || this.status !== 'flying') return;
+    this.cacheActiveIntoInactiveRailsAndSwap();
+    this.events.push(`CONTROL — ${this.ship.spec.label}`);
+  }
+
+  private cacheActiveIntoInactiveRailsAndSwap(): void {
+    this.activeId = this.activeId === 'csm' ? 'lm' : 'csm';
+    this.onActiveChanged();
+    this.cacheInactiveRails();
+  }
+
+  private onActiveChanged(): void {
+    this.planner.clear();
+    this.apollo.clearGuidance(true);
+    this.rails = null;
+    this.setWarpIndex(Math.min(this.warpIndex, 3));
+    this.elements = elementsFromState(this.ship.position, this.ship.velocity, this.primary.mu);
+  }
+
+  private cacheInactiveRails(): void {
+    const other = this.inactive;
+    this.inactiveRails = null;
+    if (!other || other.landed) return;
+    const elements = elementsFromState(other.position, other.velocity, this.primary.mu);
+    this.inactiveRails = {
+      elements,
+      meanAnomaly0: trueToMeanAnomaly(elements.trueAnomaly, elements.eccentricity),
+      time0: this.met,
+    };
   }
 
   setWarpIndex(i: number): void {
@@ -124,6 +252,24 @@ export class Simulation {
     if (this.status !== 'flying') return;
 
     const ship = this.ship;
+    const simDt = frameDt * this.warp;
+
+    // Sitting on the surface: hold until the engine overcomes local gravity.
+    if (ship.landed) {
+      this.met += simDt;
+      this.propagateInactive();
+      if (wantsBurn && ship.fuel > 0) {
+        const weight = (this.primary.mu / ship.position.lengthSq()) * ship.mass;
+        if (ship.stage.thrust * ship.throttle > weight) {
+          ship.landed = false;
+          ship.velocity.copy(ship.position.clone().normalize().multiplyScalar(3));
+          this.events.push('LIFTOFF');
+        } else {
+          this.events.push('TWR < 1 — THROTTLE UP');
+        }
+      }
+      return;
+    }
 
     // Burning or steering above physics warp auto-drops to 1×, like the classics.
     const controlsActive =
@@ -158,11 +304,11 @@ export class Simulation {
 
     ship.rcsCommand.set(translation.x, translation.y, translation.z);
 
-    const simDt = frameDt * this.warp;
     this.met += simDt;
 
     const assistSteering =
-      this.planner.autoAlign || this.planner.burnActive || this.apollo.hold !== null || this.apollo.burn !== null;
+      this.planner.autoAlign || this.planner.burnActive ||
+      this.apollo.hold !== null || this.apollo.burn !== null;
     if (this.warp <= MAX_PHYSICS_WARP && !assistSteering) {
       ship.applyRotationInput(rotation, frameDt);
       ship.updateAttitude(frameDt);
@@ -181,6 +327,7 @@ export class Simulation {
       this.stepNumeric(simDt);
     }
 
+    this.propagateInactive();
     this.elements = elementsFromState(ship.position, ship.velocity, this.primary.mu);
 
     this.checkSoi();
@@ -228,13 +375,16 @@ export class Simulation {
         time0: this.met,
       };
     }
-    const { elements, meanAnomaly0, time0 } = this.rails;
-    const M = meanAnomaly0 + meanMotion(elements) * (this.met - time0);
-    const nu = meanToTrueAnomaly(M, elements.eccentricity);
-    const vel = new Vector3();
-    const pos = stateAtTrueAnomaly(elements, nu, vel);
-    ship.position.copy(pos);
-    ship.velocity.copy(vel);
+    setRailsState(this.rails, this.met, ship.position, ship.velocity);
+  }
+
+  private propagateInactive(): void {
+    const other = this.inactive;
+    if (!other || other.landed) return;
+    if (!this.inactiveRails) this.cacheInactiveRails();
+    if (this.inactiveRails) {
+      setRailsState(this.inactiveRails, this.met, other.position, other.velocity);
+    }
   }
 
   /** Patched-conic handoff between Earth and the Moon. */
@@ -244,21 +394,37 @@ export class Simulation {
       const moonPos = MOON_BODY.positionAt(this.met);
       const rel = ship.position.clone().sub(moonPos);
       if (rel.length() < MOON.soiRadius) {
-        ship.position.copy(rel);
-        ship.velocity.sub(MOON_BODY.velocityAt(this.met));
+        this.convertFrames(moonPos, MOON_BODY.velocityAt(this.met), -1);
         this.primary = MOON_BODY;
         this.handoff('ENTERING LUNAR SPHERE OF INFLUENCE');
       }
     } else if (ship.position.length() > MOON.soiRadius) {
-      ship.position.add(MOON_BODY.positionAt(this.met));
-      ship.velocity.add(MOON_BODY.velocityAt(this.met));
+      this.convertFrames(MOON_BODY.positionAt(this.met), MOON_BODY.velocityAt(this.met), 1);
       this.primary = EARTH_BODY;
       this.handoff('LEAVING LUNAR SPHERE OF INFLUENCE');
     }
   }
 
+  /** Shift both free-flying craft into the new primary's frame. */
+  private convertFrames(bodyPos: Vector3, bodyVel: Vector3, sign: 1 | -1): void {
+    const shift = (craft: Spacecraft) => {
+      craft.position.addScaledVector(bodyPos, sign);
+      craft.velocity.addScaledVector(bodyVel, sign);
+    };
+    shift(this.ship);
+    const other = this.inactive;
+    if (other && !other.landed) {
+      shift(other);
+    } else if (other?.landed) {
+      // A landed LM can't come along to another primary — it stays behind.
+      this.lmAlive = false;
+      this.events.push('LM LEFT BEHIND — OUT OF RANGE');
+    }
+  }
+
   private handoff(message: string): void {
     this.rails = null;
+    this.inactiveRails = null;
     this.planner.clear();
     this.apollo.clearGuidance(true);
     if (this.warp > MAX_NUMERIC_WARP) this.setWarpIndex(3);
@@ -267,12 +433,40 @@ export class Simulation {
   }
 
   private checkSurface(): void {
-    if (this.ship.position.length() > this.primary.radius) return;
+    const ship = this.ship;
+    if (ship.position.length() > this.primary.radius) return;
+
+    const speed = ship.velocity.length();
+    if (!this.primary.hasAtmosphere && speed < TOUCHDOWN_SPEED) {
+      // Gentle contact on an airless body: touchdown.
+      ship.landed = true;
+      ship.firing = false;
+      ship.position.setLength(this.primary.radius);
+      ship.velocity.set(0, 0, 0);
+      ship.angularVelocity.set(0, 0, 0);
+      ship.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), ship.position.clone().normalize());
+      this.setWarpIndex(0);
+      this.planner.clear();
+      this.apollo.clearGuidance(true);
+      this.events.push(
+        ship.id === 'lm' ? 'CONTACT LIGHT — THE EAGLE HAS LANDED' : 'TOUCHDOWN',
+      );
+      return;
+    }
+
     this.status = this.primary.hasAtmosphere && this.recoverable ? 'splashdown' : 'crashed';
     this.setWarpIndex(0);
-    this.ship.firing = false;
-    // Clamp to the surface so the wreck doesn't render underground.
-    this.ship.position.setLength(this.primary.radius);
-    this.ship.velocity.set(0, 0, 0);
+    ship.firing = false;
+    ship.position.setLength(this.primary.radius);
+    ship.velocity.set(0, 0, 0);
   }
+}
+
+function setRailsState(rails: RailsState, met: number, outPos: Vector3, outVel: Vector3): void {
+  const M = rails.meanAnomaly0 + meanMotion(rails.elements) * (met - rails.time0);
+  const nu = meanToTrueAnomaly(M, rails.elements.eccentricity);
+  const vel = new Vector3();
+  const pos = stateAtTrueAnomaly(rails.elements, nu, vel);
+  outPos.copy(pos);
+  outVel.copy(vel);
 }
