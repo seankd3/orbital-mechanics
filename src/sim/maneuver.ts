@@ -15,7 +15,7 @@ export interface NodeState {
   velocity: Vector3;
 }
 
-const MAX_COMPONENT_DV = 3000; // m/s, matches the Apollo build's clamp
+const MAX_COMPONENT_DV = 6000; // m/s — room to plan a full TLI on one node
 const ALIGN_RATE = 1.8; // 1/s slerp authority while auto-aligning
 const ALIGN_RELEASE_DEG = 0.4;
 

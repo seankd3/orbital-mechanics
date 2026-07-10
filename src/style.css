@@ -134,6 +134,57 @@ html, body {
 .help-grid span:nth-child(odd) { color: var(--cyan); }
 .help-grid span:nth-child(even) { color: var(--phosphor-dim); text-transform: none; }
 
+/* ---- console buttons (ops + node editor) ---- */
+.panel { pointer-events: none; }
+.panel button { pointer-events: auto; }
+.module button {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--phosphor-faint);
+  color: var(--phosphor);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 4px;
+  cursor: pointer;
+}
+.module button:hover {
+  border-color: var(--phosphor-dim);
+  background: rgba(20, 60, 35, 0.5);
+  text-shadow: var(--glow);
+}
+.module button:active { background: rgba(40, 110, 65, 0.5); }
+.module button.go-btn { border-color: var(--phosphor-dim); color: var(--cyan); }
+.module button.warn-btn { border-color: #6e4a1e; color: var(--amber); }
+.module button.active-hold { border-color: var(--cyan); color: var(--cyan); text-shadow: var(--glow); }
+
+.btn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 7px 0 2px;
+}
+#ops-burns { grid-template-columns: repeat(5, 1fr); }
+#ops-checkpoints { grid-template-columns: repeat(2, 1fr); }
+
+.node-row {
+  display: flex; align-items: center; gap: 4px;
+  margin: 5px 0;
+  font-size: 11px;
+}
+.node-row > span { color: var(--phosphor-dim); width: 30px; flex: none; }
+.node-row > b { min-width: 42px; text-align: center; font-weight: 400; color: var(--amber); }
+.node-row button { flex: 1; }
+
+/* ---- navball ---- */
+#navball {
+  position: fixed;
+  right: 280px;
+  bottom: 16px;
+  z-index: 15;
+  pointer-events: none;
+}
+
 /* ---- CRT overlay ---- */
 #scanlines {
   position: fixed; inset: 0; z-index: 20; pointer-events: none;
