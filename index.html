@@ -60,12 +60,20 @@
     <section class="panel" id="right-panel">
       <div class="module">
         <div class="module-title">Vehicle</div>
+        <div class="row"><span>CRAFT</span><b id="craft">CSM+LM</b></div>
         <div class="row"><span>SAS</span><b id="sas" class="off">OFF</b></div>
         <div class="row"><span>ENGINE</span><b id="engine" class="off">IDLE</b></div>
         <div class="row"><span>&Delta;V REMAINING</span><b id="dv">—</b></div>
         <div class="bar-row"><span>THR</span><div class="bar"><div id="throttle-bar"></div></div><b id="throttle-pct">100%</b></div>
-        <div class="bar-row"><span>FUEL</span><div class="bar"><div id="fuel-bar"></div></div><b id="fuel-pct">100%</b></div>
+        <div class="bar-row"><span id="fuel-label">SPS</span><div class="bar"><div id="fuel-bar"></div></div><b id="fuel-pct">100%</b></div>
         <div class="bar-row"><span>RCS</span><div class="bar"><div id="rcs-bar"></div></div><b id="rcs-pct">100%</b></div>
+        <div class="row"><span>TGT DIST / RVEL</span><b><span id="tgt-dist">—</span> / <span id="tgt-rvel">—</span></b></div>
+        <div class="btn-grid" id="ops-vehicle">
+          <button data-vehicle="undock">UNDOCK</button>
+          <button data-vehicle="dock">DOCK</button>
+          <button data-vehicle="stage" class="warn-btn">STAGE</button>
+          <button data-vehicle="switch">SWAP [V]</button>
+        </div>
       </div>
       <div class="module" id="node-module">
         <div class="module-title">Maneuver Node — [N]</div>
@@ -131,6 +139,7 @@
           <span>SHIFT / CTRL</span><span>throttle ± &nbsp; (Z max, X cut)</span>
           <span>T</span><span>SAS (kill rotation)</span>
           <span>N / B</span><span>maneuver node / execute burn</span>
+          <span>V</span><span>swap CSM &harr; LM (when separated)</span>
           <span>[ ] / { }</span><span>node &Delta;V / node TIG</span>
           <span>M</span><span>map view</span>
           <span>, / .</span><span>time warp − / +</span>

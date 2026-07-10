@@ -166,6 +166,7 @@ html, body {
 }
 #ops-burns { grid-template-columns: repeat(5, 1fr); }
 #ops-checkpoints { grid-template-columns: repeat(2, 1fr); }
+#ops-vehicle { grid-template-columns: repeat(4, 1fr); }
 
 .node-row {
   display: flex; align-items: center; gap: 4px;

@@ -13,6 +13,7 @@ export interface InputHandlers {
   onNodeDv(delta: number): void;
   onNodeTig(delta: number): void;
   onToggleMap(): void;
+  onSwitchCraft(): void;
   onAnyKey(): void;
 }
 
@@ -35,6 +36,7 @@ export class Input {
         case 'KeyN': handlers.onToggleNode(); break;
         case 'KeyB': handlers.onExecuteNode(); break;
         case 'KeyM': handlers.onToggleMap(); break;
+        case 'KeyV': handlers.onSwitchCraft(); break;
         // [ ] adjust node ΔV; with Shift ({ }) they adjust node TIG.
         case 'BracketLeft':
           if (e.shiftKey) handlers.onNodeTig(-60); else handlers.onNodeDv(-10);
