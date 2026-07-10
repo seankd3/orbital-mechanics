@@ -1,5 +1,6 @@
 import {
   AdditiveBlending,
+  BufferAttribute,
   BufferGeometry,
   CanvasTexture,
   Color,
@@ -7,6 +8,7 @@ import {
   Line,
   LineBasicMaterial,
   LineLoop,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   SphereGeometry,
@@ -18,19 +20,22 @@ import { EARTH, RENDER_SCALE } from '../constants';
 
 const R = EARTH.radius * RENDER_SCALE;
 
-/** Vector-display Earth: occluding dark sphere + phosphor graticule + air glow. */
+type Coords = [number, number][];
+
+/** Vector-display Earth: occluding sphere + graticule + real coastlines + air glow. */
 export function createPlanet(): Group {
   const group = new Group();
 
   // Occluder so back-side lines hide, with a hint of deep green.
   const sphere = new Mesh(
-    new SphereGeometry(R * 0.998, 48, 32),
+    new SphereGeometry(R * 0.997, 48, 32),
     new MeshBasicMaterial({ color: new Color('#02120a') }),
   );
   group.add(sphere);
 
-  const dim = new LineBasicMaterial({ color: new Color('#3f9e64') });
-  const bright = new LineBasicMaterial({ color: new Color('#63e094') });
+  // With coastlines carrying the detail, the graticule recedes to scaffolding.
+  const dim = new LineBasicMaterial({ color: new Color('#1e5c3a') });
+  const bright = new LineBasicMaterial({ color: new Color('#2f8a55') });
 
   // Latitude rings every 15°.
   for (let lat = -75; lat <= 75; lat += 15) {
@@ -58,8 +63,52 @@ export function createPlanet(): Group {
     group.add(new Line(new BufferGeometry().setFromPoints(pts), dim));
   }
 
+  loadCoastlines(group);
   group.add(createAtmosphereGlow());
   return group;
+}
+
+/** Natural Earth 50m coastlines as phosphor line segments, loaded async. */
+function loadCoastlines(group: Group): void {
+  fetch('/data/ne_50m_coastline.json')
+    .then((r) => r.json())
+    .then((geo: { features: { geometry: { type: string; coordinates: unknown } }[] }) => {
+      const segments: number[] = [];
+      for (const feature of geo.features) {
+        const { type, coordinates } = feature.geometry;
+        const lines: Coords[] =
+          type === 'LineString' ? [coordinates as Coords] : (coordinates as Coords[]);
+        for (const line of lines) {
+          for (let i = 1; i < line.length; i++) {
+            pushVertex(segments, line[i - 1]);
+            pushVertex(segments, line[i]);
+          }
+        }
+      }
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(new Float32Array(segments), 3));
+      group.add(
+        new LineSegments(
+          geometry,
+          new LineBasicMaterial({ color: new Color('#63d98f'), transparent: true, opacity: 0.85 }),
+        ),
+      );
+    })
+    .catch(() => {
+      /* graticule-only Earth still reads fine */
+    });
+}
+
+function pushVertex(out: number[], [lon, lat]: [number, number]): void {
+  const phi = (lat * Math.PI) / 180;
+  const theta = (lon * Math.PI) / 180;
+  // Slightly above the graticule shell so coastlines win the depth fight.
+  const r = R * 1.0015;
+  out.push(
+    r * Math.cos(phi) * Math.cos(theta),
+    r * Math.sin(phi),
+    -r * Math.cos(phi) * Math.sin(theta),
+  );
 }
 
 function createAtmosphereGlow(): Sprite {

@@ -1,33 +1,53 @@
 import {
+  AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
   Color,
+  Group,
   Points,
   PointsMaterial,
 } from 'three';
 
-/** Distant vector stars on a far shell. */
-export function createStarfield(count = 3500, radius = 120_000): Points {
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const tint = [new Color('#9dffbb'), new Color('#cfeee0'), new Color('#57e6ff')];
+/**
+ * Real night sky: HYG catalog (~8,900 stars to mag 6.5) placed on a far
+ * celestial sphere. Loads async; the group starts empty and fills in.
+ * Each catalog row is [ra_deg, dec_deg, magnitude, B-V color index].
+ */
+export function createStarfield(radius = 120_000): Group {
+  const group = new Group();
 
-  for (let i = 0; i < count; i++) {
-    // Uniform on the sphere.
-    const u = Math.random() * 2 - 1;
-    const theta = Math.random() * Math.PI * 2;
-    const s = Math.sqrt(1 - u * u);
-    positions[i * 3] = radius * s * Math.cos(theta);
-    positions[i * 3 + 1] = radius * u;
-    positions[i * 3 + 2] = radius * s * Math.sin(theta);
+  fetch('/data/star_catalog.json')
+    .then((r) => r.json())
+    .then((catalog: [number, number, number, number][]) => {
+      group.add(buildLayer(catalog.filter(([, , m]) => m <= 2.5), radius, 2.6));
+      group.add(buildLayer(catalog.filter(([, , m]) => m > 2.5), radius, 1.4));
+    })
+    .catch(() => {
+      /* no stars is survivable; console already shows the fetch error */
+    });
 
-    const c = tint[Math.floor(Math.random() * tint.length)]
-      .clone()
-      .multiplyScalar(0.35 + Math.random() * 0.65);
+  return group;
+}
+
+function buildLayer(stars: [number, number, number, number][], radius: number, size: number): Points {
+  const positions = new Float32Array(stars.length * 3);
+  const colors = new Float32Array(stars.length * 3);
+  const c = new Color();
+
+  stars.forEach(([raDeg, decDeg, mag, bv], i) => {
+    const ra = (raDeg * Math.PI) / 180;
+    const dec = (decDeg * Math.PI) / 180;
+    positions[i * 3] = radius * Math.cos(dec) * Math.cos(ra);
+    positions[i * 3 + 1] = radius * Math.sin(dec);
+    positions[i * 3 + 2] = -radius * Math.cos(dec) * Math.sin(ra);
+
+    // Brightness from magnitude (mag 0 ≈ full), gentle floor so dim stars survive.
+    const brightness = Math.min(1, Math.max(0.16, Math.pow(10, -0.32 * mag)));
+    c.copy(bvToColor(bv)).multiplyScalar(brightness);
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
     colors[i * 3 + 2] = c.b;
-  }
+  });
 
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
@@ -35,6 +55,21 @@ export function createStarfield(count = 3500, radius = 120_000): Points {
 
   return new Points(
     geometry,
-    new PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true }),
+    new PointsMaterial({
+      size,
+      sizeAttenuation: false,
+      vertexColors: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+    }),
   );
+}
+
+/** Rough B-V → RGB, muted toward the phosphor screen's palette. */
+function bvToColor(bv: number): Color {
+  if (bv < 0.0) return new Color('#b4c8ff');
+  if (bv < 0.4) return new Color('#e8eeff');
+  if (bv < 0.8) return new Color('#ffffff');
+  if (bv < 1.2) return new Color('#fff0d0');
+  return new Color('#ffd9ae');
 }
