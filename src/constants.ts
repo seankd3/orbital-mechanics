@@ -23,8 +23,10 @@ export const RENDER_SCALE = 1e-6;
 
 export const SHIP = {
   dryMass: 12_000, // kg
-  fuelMass: 18_000, // kg
-  thrust: 90_000, // N (SPS-class engine)
+  // Game-feel tank: ~5,970 m/s Δv so the full TLI→LOI→TEI arc fits without
+  // modeling Saturn V staging (real CSM leaned on the S-IVB for TLI).
+  fuelMass: 60_000, // kg
+  thrust: 400_000, // N — keeps a TLI burn around six minutes
   isp: 314, // s
   g0: 9.80665,
   /** RCS translation: 2 jets × 445 N, separate propellant budget. */
