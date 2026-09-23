@@ -73,9 +73,10 @@ export const DESCENT: Chapter = {
         const c = descentGuidance(ctx.sim.ship, ctx.sim.primary);
         holdCue(ctx, c.dir, c.throttle);
       },
+      assist: descentAssist,
       done: (ctx) => ctx.sim.ship.landed,
       next: (ctx) => (missedPdi(ctx) ? (ctx.sim.orbit.nextPeriapsis(ctx.sim.met) ?? ctx.sim.met) - 20 : null),
-      say: (ctx) => (missedPdi(ctx) ? 'EAGLE, YOU MISSED PDI. G TAKES YOU AROUND TO THE NEXT PERILUNE — LIGHT IT THERE.' : descentCall(ctx.sim)),
+      say: (ctx) => (missedPdi(ctx) ? 'EAGLE, YOU MISSED PDI. G TAKES YOU AROUND TO THE NEXT PERILUNE — LIGHT IT THERE.' : descentCall(ctx)),
     },
   ],
   finish(ctx) {
@@ -101,6 +102,32 @@ export const DESCENT: Chapter = {
   },
 };
 
+/**
+ * What Apollo's crew had when flying by hand: the computer throttles
+ * through P63/P64 while you fly the attitude; in P66 Shift/Ctrl click the
+ * rate of descent and the computer holds it. X shuts the DPS down; Z relights.
+ */
+function descentAssist(ctx: Ctx, dt: number, input: number): boolean {
+  const ship = ctx.sim.ship;
+  if (ship.landed || ship.throttle === 0 || ship.fuel <= 0) return false;
+  const c = descentGuidance(ship, ctx.sim.primary);
+  if (c.phase !== 'P66 LAND') {
+    ship.throttle = Math.max(0.05, c.throttle);
+    delete ctx.memo.rod;
+    return true;
+  }
+  const f = localFrame(ship, ctx.sim.primary);
+  ctx.memo.rod ??= Math.max(-3, Math.min(-0.5, f.vz));
+  ctx.memo.rod = Math.max(-5, Math.min(1, ctx.memo.rod + input * ROD_RATE * dt));
+  const lift = Math.max(0.3, ship.forward.dot(f.up));
+  const az = 1.5 * (ctx.memo.rod - f.vz) + f.gEff;
+  ship.throttle = Math.max(0.05, Math.min(1, (az * ship.mass) / (ship.stage.thrust * lift)));
+  return true;
+}
+
+/** P66 rate-of-descent change per second of Shift/Ctrl, m/s. */
+const ROD_RATE = 1;
+
 /** DPS never lit this phase, and more than 90 s past perilune: this pass is gone. */
 function missedPdi(ctx: Ctx): boolean {
   const sim = ctx.sim;
@@ -110,20 +137,23 @@ function missedPdi(ctx: Ctx): boolean {
   return since > 90 && since < o.period - 60;
 }
 
-function descentCall(sim: Simulation): string {
+function descentCall(ctx: Ctx): string {
+  const sim = ctx.sim;
   const ship = sim.ship;
   const f = localFrame(ship, sim.primary);
   const cue = descentGuidance(ship, sim.primary);
   const seconds = ship.fuel / (ship.stage.thrust / ship.exhaustVelocity) / Math.max(ship.throttle, 0.3);
-  if (!ship.firing && f.h > 1_000) return 'LIGHT THE DPS — Z — AND FOLLOW THE ◇. THE THROTTLE BUG ▸ ON THE BAR IS WHAT GUIDANCE WANTS.';
+  if (!ship.firing && f.h > 1_000) return 'LIGHT THE DPS — Z. THE COMPUTER THROTTLES; YOU FLY THE ◇ (F HOLDS IT).';
   if (ship.fuelFraction < 0.05) return `${Math.round(seconds)} SECONDS. GET IT DOWN.`;
   if (cue.phase === 'P66 LAND') {
+    const rod = ctx.memo.rod ?? f.vz;
+    if (f.vh > 3) return `P66 — YOU HAVE IT. DRIFT ${speed(f.vh, 1)}: NULL IT WITH THE STICK (OR F) BEFORE YOU SET DOWN.`;
     return f.h > 30
-      ? `P66. ${Math.round(f.h)} M, DOWN ${speed(-f.vz, 1)}, DRIFT ${speed(f.vh, 1)}. EASE IT DOWN — SHIFT/CTRL.`
-      : `${Math.round(f.h)} M… ${speed(-f.vz, 1)} DOWN… PICKING UP SOME DUST.`;
+      ? `P66. ${Math.round(f.h)} M, SINK ${speed(-rod, 1)} — SHIFT SLOWS IT, CTRL SPEEDS IT. AIM FOR UNDER 1.5 M/S AT CONTACT.`
+      : `${Math.round(f.h)} M… DOWN ${speed(-f.vz, 1)}… PICKING UP SOME DUST.`;
   }
-  if (cue.phase === 'P64 APPROACH') return `P64 PITCHOVER. ${km(f.h, 1)}. KEEP IT ON THE CUE.`;
-  return `P63 BRAKING. ${km(f.h, 1)}, ${speed(f.vh)} ACROSS THE GROUND. YOU'RE GO.`;
+  if (cue.phase === 'P64 APPROACH') return `P64 PITCHOVER. ${km(f.h, 1)}. KEEP IT ON THE ◇ — P66 IS YOURS BELOW 250 M.`;
+  return `P63 BRAKING. ${km(f.h, 1)}, ${speed(f.vh)} ACROSS THE GROUND. AUTO THROTTLE; YOU'RE GO.`;
 }
 
 // --- ascent ---------------------------------------------------------------------

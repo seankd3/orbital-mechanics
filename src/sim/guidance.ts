@@ -78,10 +78,17 @@ export function descentGuidance(ship: Spacecraft, body: Body): PoweredCue {
     if (g.tgo > 8) return cue(g.accel, aMax, f.h > 2_000 ? 'P63 BRAKING' : 'P64 APPROACH', g.tgo);
   }
   // P66: rate-of-descent control, horizontal nulling, nearly upright.
-  const vzCmd = -Math.min(3, Math.max(0.7, f.h / 25));
+  // Drifting fast? Slow the descent (hover-ish) until the drift is killed.
+  const drift = Math.min(1, 3 / Math.max(f.vh, 1e-6));
+  const vzCmd = -Math.min(3, Math.max(0.7, f.h / 25)) * Math.max(0.15, drift);
+  return p66(f, aMax, vzCmd);
+}
+
+/** P66 attitude + throttle for a commanded sink rate (vz, m/s, negative down). */
+export function p66(f: ReturnType<typeof localFrame>, aMax: number, vzCmd: number): PoweredCue {
   const az = 1.2 * (vzCmd - f.vz) + f.gEff;
   const lateral = f.vhVec.clone().multiplyScalar(-0.6);
-  lateral.clampLength(0, 0.35 * Math.max(az, 0.5));
+  lateral.clampLength(0, 0.45 * Math.max(az, 0.5));
   const accel = f.up.clone().multiplyScalar(Math.max(0, az)).add(lateral);
   return cue(accel, aMax, 'P66 LAND', f.h / Math.max(0.5, -f.vz));
 }

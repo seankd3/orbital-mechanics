@@ -205,7 +205,7 @@ function fly(dt: number): void {
   // G: an eased warp that lands exactly on the event.
   if (sim.warpUntil !== null) sim.warp = Math.min(100_000, Math.max(20, (sim.warpUntil - sim.met) / 0.6));
 
-  d.preStep(dt);
+  d.preStep(dt, input.throttleRate);
   sim.step(dt);
   d.postStep();
   drain();

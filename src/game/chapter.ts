@@ -56,6 +56,12 @@ export interface PilotPhase extends PhaseBase {
   done(ctx: Ctx): boolean;
   /** A moment G may warp to mid-phase (e.g. the next pass after a missed PDI). */
   next?(ctx: Ctx): number | null;
+  /**
+   * Automation the real crew had even when flying by hand (auto-throttle,
+   * rate-of-descent hold). Runs every frame; `throttleInput` is the pilot's
+   * Shift/Ctrl (−1..1). Returns true if it set the throttle.
+   */
+  assist?(ctx: Ctx, dt: number, throttleInput: number): boolean;
 }
 
 /** Wait for a moment in the flight (G warps straight there). */

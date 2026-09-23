@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { localFrame } from '../sim/guidance';
 import { Simulation } from '../sim/simulation';
 import { CHAPTERS } from './chapters';
 import { Director } from './director';
@@ -49,6 +50,35 @@ describe('a hand-flown chapter', () => {
     });
     expect(d.status).toBe('complete');
     expect(d.ctx.usedAuto).toBe(false);
+    expect(d.grade!.stars).toBe(3);
+  });
+});
+
+describe('a hand-flown landing', () => {
+  it('sets down softly with auto-throttle, F on the cue and P66 rate-of-descent clicks', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('descent')], sim, nominal.start(index('descent')));
+    warpNext(d);
+    const seen: number[] = [];
+    const lag = Math.round(0.4 / DT); // human reaction time
+    for (let i = 0; i < 60 * 30 * 20 && d.status === 'flying'; i++) {
+      let rodInput = 0;
+      if (d.phase?.name === 'DESCENT') {
+        if (!sim.ship.firing && !sim.ship.landed) sim.ship.throttle = 1; // Z at PDI
+        sim.hold = d.holdTarget(); // F
+        const f = localFrame(sim.ship, sim.primary);
+        seen.push(-f.vz);
+        const sink = seen[Math.max(0, seen.length - 1 - lag)];
+        const want = Math.max(0.8, Math.min(3, f.h / 20)); // sink ≈ altitude / 20
+        if (d.ctx.memo.rod !== undefined) rodInput = sink > want + 0.3 ? 1 : sink < want - 0.3 ? -1 : 0;
+      }
+      d.preStep(DT, rodInput);
+      sim.step(DT);
+      d.postStep();
+      sim.events.length = 0;
+    }
+    expect(d.status).toBe('complete');
+    expect(d.grade!.lines[0].value).toBe('SOFT');
     expect(d.grade!.stars).toBe(3);
   });
 });
