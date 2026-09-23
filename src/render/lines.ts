@@ -33,11 +33,12 @@ export interface Stroke {
   /** Dash and gap lengths in render units. */
   dash?: [number, number];
   /**
-   * Fade features as they shrink below a few pixels on screen (grids,
-   * craters): each segment carries a feature size, and the geometry lies
-   * on a sphere about its object's origin (for foreshortening).
+   * Fade features as they shrink below a few pixels on screen: each
+   * segment carries a feature size (render units). `true`: the geometry
+   * lies on a sphere about its object's origin and is foreshortened with
+   * it (grids, craters); `'solid'`: no foreshortening (rocks).
    */
-  fade?: boolean;
+  fade?: boolean | 'solid';
 }
 
 /** Device-pixel viewport, shared by every line material. */
@@ -81,7 +82,12 @@ const VERTEX: [string, string][] = [
       vec3 n = normalize( ( modelViewMatrix * vec4( atStart ? instanceStart : instanceEnd, 0.0 ) ).xyz );
       bool persp = projectionMatrix[ 2 ][ 3 ] == - 1.0;
       vec3 view = persp ? normalize( p ) : vec3( 0.0, 0.0, - 1.0 );
-      float size = instanceFeature * abs( dot( view, n ) ) * projectionMatrix[ 1 ][ 1 ] * 0.5 * resolution.y;
+      #ifdef FEATURE_FADE_SOLID
+        float foreshortening = 1.0;
+      #else
+        float foreshortening = abs( dot( view, n ) );
+      #endif
+      float size = instanceFeature * foreshortening * projectionMatrix[ 1 ][ 1 ] * 0.5 * resolution.y;
       vFade = smoothstep( ${FADE_FROM}, ${FADE_TO}, persp ? size / length( p ) : size );
     }
     #endif`],
@@ -131,6 +137,7 @@ export class VectorLineMaterial extends LineMaterial {
     this.opacity = opacity;
     if (dash) [this.dashSize, this.gapSize] = dash;
     if (fade) this.defines.USE_FEATURE_FADE = '';
+    if (fade === 'solid') this.defines.FEATURE_FADE_SOLID = '';
     this.uniforms.resolution.value = resolution; // shared: one resize updates all
     this.transparent = true;
     this.depthWrite = false;

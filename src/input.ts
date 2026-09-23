@@ -7,7 +7,7 @@ export type Command =
   | 'hold' | 'sas' | 'auto'
   | 'map' | 'focus' | 'help'
   | 'enter' | 'restart' | 'menu' | 'replan' | 'continue'
-  | 'up' | 'down';
+  | 'up' | 'down' | 'left' | 'right';
 
 const COMMANDS: Record<string, Command> = {
   Period: 'warp-up',
@@ -29,6 +29,8 @@ const COMMANDS: Record<string, Command> = {
   Backspace: 'replan',
   ArrowUp: 'up',
   ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
 };
 
 /**
