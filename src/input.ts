@@ -6,7 +6,7 @@ export type Command =
   | 'throttle-full' | 'throttle-cut'
   | 'hold' | 'sas' | 'auto'
   | 'map' | 'focus' | 'help'
-  | 'enter' | 'restart' | 'menu' | 'replan'
+  | 'enter' | 'restart' | 'menu' | 'replan' | 'continue'
   | 'up' | 'down';
 
 const COMMANDS: Record<string, Command> = {
@@ -24,6 +24,7 @@ const COMMANDS: Record<string, Command> = {
   Enter: 'enter',
   NumpadEnter: 'enter',
   KeyR: 'restart',
+  KeyC: 'continue',
   Escape: 'menu',
   Backspace: 'replan',
   ArrowUp: 'up',
