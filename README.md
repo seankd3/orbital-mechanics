@@ -32,6 +32,7 @@ can start any chapter you've reached from the nominal flight.
 | F | Hold attitude on the ◇ guidance cue |
 | Z / X | Throttle full / cut off |
 | Shift / Ctrl | Throttle up / down (feather a cutoff); in P66, slow / speed the descent |
+| ↑↓ ←→ · Click the ground | In P64, move the landing site: long/short, left/right, or right there |
 | I/K · J/L · U/O | RCS translation (docking) |
 | G | Warp to the next event (ignition, SOI, PDI, entry…) |
 | , / . | Time warp down / up (10× max under power) |
