@@ -1,14 +1,14 @@
 /**
- * Synthesized cabin audio (ported from the Apollo build): SPS rumble
- * (dual low sines + filtered noise), RCS pops, low-fuel master alarm,
- * constant cabin hum. Web Audio only — no sample files.
+ * Synthesized cabin audio (harvested from the Apollo build): engine rumble,
+ * RCS pops, the master alarm — plus quindar tones bracketing each CAPCOM
+ * call. Web Audio only; silence is part of the design.
  */
-export class AudioEngine {
+export class Audio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
-  private spsGain!: GainNode;
-  private alarmGain!: GainNode;
-  private alarmTimer: number | null = null;
+  private engine!: GainNode;
+  private engineFilter!: BiquadFilterNode;
+  private alarm: { osc: OscillatorNode; timer: number } | null = null;
   private lastRcs = 0;
 
   /** Must be called from a user gesture (autoplay policy). */
@@ -16,110 +16,126 @@ export class AudioEngine {
     if (this.ctx) return;
     const ctx = new AudioContext();
     this.ctx = ctx;
-
     this.master = ctx.createGain();
-    this.master.gain.value = 0.5;
+    this.master.gain.value = 0.45;
     this.master.connect(ctx.destination);
 
-    // Cabin hum.
     const hum = ctx.createOscillator();
-    hum.frequency.value = 120;
+    hum.frequency.value = 118;
     const humGain = ctx.createGain();
-    humGain.gain.value = 0.012;
+    humGain.gain.value = 0.008;
     hum.connect(humGain).connect(this.master);
     hum.start();
 
-    // SPS: two low sines + lowpassed noise behind one gate.
-    this.spsGain = ctx.createGain();
-    this.spsGain.gain.value = 0;
-    this.spsGain.connect(this.master);
-    for (const [freq, level] of [[65, 0.5], [25, 0.6]] as const) {
+    // Engine: low sines plus low-passed noise behind one gate.
+    this.engine = ctx.createGain();
+    this.engine.gain.value = 0;
+    this.engineFilter = ctx.createBiquadFilter();
+    this.engineFilter.type = 'lowpass';
+    this.engineFilter.frequency.value = 380;
+    this.engineFilter.connect(this.engine).connect(this.master);
+    for (const [f, level] of [[31, 0.7], [62, 0.35]] as const) {
       const osc = ctx.createOscillator();
-      osc.frequency.value = freq;
+      osc.frequency.value = f;
       const g = ctx.createGain();
       g.gain.value = level;
-      osc.connect(g).connect(this.spsGain);
+      osc.connect(g).connect(this.engine);
       osc.start();
     }
     const noise = ctx.createBufferSource();
-    noise.buffer = noiseBuffer(ctx);
+    noise.buffer = noiseBuffer(ctx, 2);
     noise.loop = true;
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.value = 400;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.value = 0.5;
-    noise.connect(noiseFilter).connect(noiseGain).connect(this.spsGain);
+    const ng = ctx.createGain();
+    ng.gain.value = 0.9;
+    noise.connect(ng).connect(this.engineFilter);
     noise.start();
-
-    this.alarmGain = ctx.createGain();
-    this.alarmGain.gain.value = 0;
-    this.alarmGain.connect(this.master);
   }
 
-  /** Per-frame: engine gate follows throttle; alarm follows fuel fraction. */
-  update(firing: boolean, throttle: number, fuelFraction: number): void {
+  /** Per frame: engine follows thrust; `size` 0..1 opens the filter (J-2 ≫ APS). */
+  update(firing: boolean, throttle: number, size: number, alarm: boolean): void {
     if (!this.ctx) return;
-    const target = firing ? 0.1 + 0.25 * throttle : 0;
-    this.spsGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.08);
-
-    const lowFuel = fuelFraction > 0 && fuelFraction < 0.1;
-    if (lowFuel && this.alarmTimer === null) {
-      this.startAlarm();
-    } else if (!lowFuel && fuelFraction > 0.15 && this.alarmTimer !== null) {
-      this.stopAlarm();
-    }
+    const t = this.ctx.currentTime;
+    this.engine.gain.setTargetAtTime(firing ? 0.12 + 0.28 * throttle : 0, t, firing ? 0.06 : 0.03);
+    this.engineFilter.frequency.setTargetAtTime(220 + 520 * size, t, 0.2);
+    if (alarm && !this.alarm) this.startAlarm();
+    if (!alarm && this.alarm) this.stopAlarm();
   }
 
-  fireRcs(): void {
+  rcs(): void {
     if (!this.ctx) return;
     const now = performance.now();
-    if (now - this.lastRcs < 60) return;
+    if (now - this.lastRcs < 70) return;
     this.lastRcs = now;
+    this.blip(1800, 0.05, 0.12, 'bandpass');
+  }
 
+  /** Quindar: the 2525 Hz intro tone of a CAPCOM transmission. */
+  quindar(): void {
+    this.tone(2525, 0.25, 0.05);
+  }
+
+  /** Soft confirmation blip for good events. */
+  chime(): void {
+    this.tone(1320, 0.08, 0.04);
+    setTimeout(() => this.tone(1760, 0.1, 0.035), 90);
+  }
+
+  private tone(freq: number, seconds: number, level: number): void {
+    if (!this.ctx) return;
     const ctx = this.ctx;
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(ctx, 0.02);
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 1800;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.25, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-    src.connect(bp).connect(g).connect(this.master);
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(level, ctx.currentTime + 0.01);
+    g.gain.setValueAtTime(level, ctx.currentTime + seconds - 0.02);
+    g.gain.linearRampToValueAtTime(0, ctx.currentTime + seconds);
+    osc.connect(g).connect(this.master);
+    osc.start();
+    osc.stop(ctx.currentTime + seconds + 0.05);
+  }
+
+  private blip(freq: number, seconds: number, level: number, type: BiquadFilterType): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx, seconds);
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(level, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + seconds);
+    src.connect(f).connect(g).connect(this.master);
     src.start();
   }
 
   private startAlarm(): void {
-    if (!this.ctx) return;
-    const ctx = this.ctx;
+    const ctx = this.ctx!;
     const osc = ctx.createOscillator();
     osc.type = 'square';
-    osc.frequency.value = 400;
-    osc.connect(this.alarmGain);
+    osc.frequency.value = 750;
+    const g = ctx.createGain();
+    g.gain.value = 0.025;
+    osc.connect(g).connect(this.master);
     osc.start();
-    this.alarmGain.gain.value = 0.05;
-    let high = false;
-    this.alarmTimer = window.setInterval(() => {
-      high = !high;
-      osc.frequency.value = high ? 600 : 400;
-    }, 350);
-    // Keep a handle so stopAlarm can kill the oscillator.
-    (this.alarmGain as GainNode & { osc?: OscillatorNode }).osc = osc;
+    let hi = false;
+    const timer = window.setInterval(() => {
+      hi = !hi;
+      osc.frequency.value = hi ? 2000 : 750;
+    }, 400);
+    this.alarm = { osc, timer };
   }
 
   private stopAlarm(): void {
-    if (this.alarmTimer !== null) {
-      clearInterval(this.alarmTimer);
-      this.alarmTimer = null;
-    }
-    this.alarmGain.gain.value = 0;
-    const osc = (this.alarmGain as GainNode & { osc?: OscillatorNode }).osc;
-    osc?.stop();
+    if (!this.alarm) return;
+    clearInterval(this.alarm.timer);
+    this.alarm.osc.stop();
+    this.alarm = null;
   }
 }
 
-function noiseBuffer(ctx: AudioContext, seconds = 1): AudioBuffer {
+function noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
   const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * seconds)), ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
