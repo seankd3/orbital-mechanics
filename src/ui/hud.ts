@@ -5,6 +5,7 @@ import type { Simulation } from '../sim/simulation';
 import { earthArc, entryAngle, perilune } from '../sim/targeting';
 import type { Director } from '../game/director';
 import { CHAPTERS } from '../game/chapters';
+import { BINGO_RESERVE, hoverSeconds } from '../game/chapters/descent';
 import { clock, degrees, km, met, range, speed, warp } from './format';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -143,14 +144,15 @@ export class Hud {
     switch (p.name) {
       case 'DESCENT': {
         const f = localFrame(sim.ship, sim.primary);
-        const burnSeconds = sim.ship.fuel / (sim.ship.stage.thrust / sim.ship.exhaustVelocity) / Math.max(0.3, sim.ship.throttle);
+        const toBingo = hoverSeconds(sim) - BINGO_RESERVE;
         return (
-          `<h3>${cue?.label ?? p.name}</h3>` +
+          (cue?.alarm ? `<h3 class="bad">PROGRAM ALARM ${cue.alarm}</h3>` : `<h3>${cue?.label ?? p.name}</h3>`) +
           `<div class="row"><span class="k">ALTITUDE</span><b class="big">${range(f.h)}</b></div>` +
           rows([
             ['SINK RATE', speed(-f.vz, 1), -f.vz > 3 && f.h < 200 ? 'bad' : ''],
             ['DRIFT', speed(f.vh, f.vh < 100 ? 1 : 0), f.vh > 3 && f.h < 200 ? 'plan' : ''],
-            ['DPS LEFT', `${Math.round(burnSeconds)} S`, burnSeconds < 60 ? 'bad' : ''],
+            ...(cue?.site ? [['LPD', cue.hazard ? 'BOULDERS — ↑↓←→' : 'CLEAR', cue.hazard ? 'bad' : 'good'] as Row] : []),
+            ['TO BINGO', toBingo > 0 ? `${Math.round(toBingo)} S` : 'BINGO', toBingo < 30 ? 'bad' : toBingo < 60 ? 'plan' : ''],
             d.ctx.memo.rod !== undefined && !d.auto
               ? ['ROD SET', `${speed(-d.ctx.memo.rod, 1)} ↓`, 'plan']
               : ['THROTTLE', d.auto ? 'COMPUTER' : 'AUTO THR', 'plan'],

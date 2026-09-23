@@ -1,9 +1,10 @@
-import { Group, Quaternion, Vector3, type Scene } from 'three';
+import { Quaternion, Vector3, type Scene } from 'three';
 import type { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { EARTH, MOON, RENDER_SCALE } from '../constants';
 import { EARTH_BODY, MOON_BODY } from '../sim/bodies';
 import type { Arc } from '../sim/coast';
 import type { Simulation } from '../sim/simulation';
+import { BoulderView, LpdReticle } from './boulders';
 import { isVectorLine, LineBuffer, lineMaterial, polyline } from './lines';
 import { createEarth } from './planet';
 import { createMoon } from './moon';
@@ -41,9 +42,11 @@ export class World {
   private readonly drop = new LineBuffer(lineMaterial({ color: DIM, width: 1.25 }), 17);
   private readonly dropPoints = new Float32Array(17 * 6);
   private padSite: Vector3 | null = null;
+  private boulders: BoulderView | null = null;
+  private readonly lpd = new LpdReticle();
 
   constructor(scene: Scene) {
-    this.moon.add(this.moonPatch.group);
+    this.moon.add(this.moonPatch.group, this.lpd.group);
     this.earth.add(this.earthPatch.group);
     const ring: Vector3[] = [];
     for (let i = 0; i < 180; i++) {
@@ -64,8 +67,11 @@ export class World {
     return sim.absolutePosition(sim[which]).multiplyScalar(RENDER_SCALE);
   }
 
-  /** `unitsPerPx`: map scale, render units per CSS pixel (sizes the plan's dashes). */
-  sync(sim: Simulation, paths: Paths, map: boolean, time: number, unitsPerPx: number): void {
+  /**
+   * `unitsPerPx`: map scale, render units per CSS pixel (sizes the plan's
+   * dashes). `lpd`: the landing point designator's site (body-fixed), if live.
+   */
+  sync(sim: Simulation, paths: Paths, map: boolean, time: number, unitsPerPx: number, lpd: { site: Vector3; hazard: boolean } | null): void {
     const met = sim.met;
     const moonPos = MOON_BODY.positionAt(met).multiplyScalar(RENDER_SCALE);
     this.moon.position.copy(moonPos);
@@ -126,6 +132,7 @@ export class World {
       for (const child of body.children) if (isVectorLine(child)) child.visible = !near;
     }
     this.syncDropLine(sim, low && sim.altitude < 4_000 && !sim.ship.landed);
+    this.syncSite(sim, low && patch === this.moonPatch, lpd);
 
     // Trajectories (map only): the next two legs — out and the encounter.
     for (const t of [this.track, this.plan, this.partner]) t.visible = map;
@@ -134,6 +141,23 @@ export class World {
       this.plan.update(paths.plan?.slice(0, 2) ?? null, met, sim.primary, unitsPerPx);
       this.partner.update(paths.partner, met, sim.primary);
     }
+  }
+
+  /** The landing site: the boulder field once the computer has picked it, and the LPD. */
+  private syncSite(sim: Simulation, near: boolean, lpd: { site: Vector3; hazard: boolean } | null): void {
+    if (this.boulders?.field !== sim.terrain) {
+      if (this.boulders) {
+        this.moon.remove(this.boulders.group);
+        this.boulders.dispose();
+      }
+      this.boulders = sim.terrain ? new BoulderView(sim.terrain) : null;
+      if (this.boulders) this.moon.add(this.boulders.group);
+    }
+    if (this.boulders) this.boulders.group.visible = near;
+    const site = near && lpd ? lpd.site : null;
+    const shipFixed = sim.ship.position.clone().applyAxisAngle(Y, -sim.primary.spinAt(sim.met));
+    const slant = site ? site.clone().multiplyScalar(MOON.radius).distanceTo(shipFixed) : 0;
+    this.lpd.update(site, lpd?.hazard ?? false, MOON.radius, slant);
   }
 
   /** A plumb line from the craft to the ground with a footprint ring. */

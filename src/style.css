@@ -71,6 +71,8 @@ b { font-weight: 500; }
 }
 .card:empty { display: none; }
 .card h3 { margin: 0 0 8px; font-size: 10px; font-weight: 500; letter-spacing: 0.3em; color: var(--plan); }
+.card h3.bad { color: var(--warn); animation: master-alarm 0.8s steps(2, jump-none) infinite; }
+@keyframes master-alarm { 50% { opacity: 0.35; } }
 .row { display: flex; justify-content: space-between; gap: 12px; margin: 3px 0; }
 .row .k { font-size: 10px; letter-spacing: 0.12em; align-self: center; }
 .big { font-size: 18px; letter-spacing: 0.02em; white-space: nowrap; }
