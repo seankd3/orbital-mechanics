@@ -3,7 +3,7 @@ import { MAX_POWERED_WARP } from '../constants';
 import { magnitude, stateOf, type Maneuver } from '../sim/burn';
 import { BurnGuide, pointQuaternion } from '../sim/executor';
 import type { Simulation, Snapshot } from '../sim/simulation';
-import type { Chapter, Ctx, Cue, Grade, Phase } from './chapter';
+import type { Chapter, Ctx, Cue, Designation, Grade, Phase } from './chapter';
 
 export type Status = 'flying' | 'complete' | 'failed';
 
@@ -81,6 +81,12 @@ export class Director {
     if (this.auto) this.ctx.usedAuto = true;
   }
 
+  /** Redesignate the current phase's target (LPD), if it has one. */
+  designate(how: Designation): string | null {
+    const p = this.phase;
+    return this.status === 'flying' && p?.kind === 'pilot' && p.designate ? p.designate(this.ctx, how) : null;
+  }
+
   /** Accept a paused (under-)burn and move on. */
   accept(): void {
     if (this.guide?.phase === 'paused') this.guide.accept();
@@ -141,6 +147,7 @@ export class Director {
       }
     }
 
+    if (p?.kind === 'pilot') p.tick?.(this.ctx);
     const reason = sim.outcome?.kind === 'lost' ? sim.outcome.reason : this.missedIgnition() ?? this.chapter.failed?.(this.ctx) ?? null;
     if (reason) {
       this.status = 'failed';

@@ -15,7 +15,16 @@ export interface Cue {
   toGo?: number;
   /** Program label, e.g. "P63 BRAKING". */
   label: string;
+  /** A program alarm is sounding (its code, e.g. "1202"). */
+  alarm?: string;
+  /** Landing point designator: the site the computer is flying to (body-fixed unit vector). */
+  site?: Vector3;
+  /** The designated site is on hazardous ground. */
+  hazard?: boolean;
 }
+
+/** A landing point redesignation: LPD clicks (along, across track) or a picked surface point (body-fixed). */
+export type Designation = { clicks: [number, number] } | { at: Vector3 };
 
 /** Chapter scratch state shared by its phases, grader and CAPCOM lines. */
 export interface Ctx {
@@ -62,6 +71,10 @@ export interface PilotPhase extends PhaseBase {
    * Shift/Ctrl (−1..1). Returns true if it set the throttle.
    */
   assist?(ctx: Ctx, dt: number, throttleInput: number): boolean;
+  /** Every frame after the sim steps (events: alarms, callouts, gates). */
+  tick?(ctx: Ctx): void;
+  /** Redesignate a target (the LPD); returns a line for the pilot. */
+  designate?(ctx: Ctx, how: Designation): string;
 }
 
 /** Wait for a moment in the flight (G warps straight there). */
