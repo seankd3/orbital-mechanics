@@ -116,6 +116,7 @@ function drain(): void {
   for (const e of sim.events) {
     notify(e.text, e.tone);
     if (e.tone === 'good') audio.chime();
+    if (e.voice) audio.voice(e.voice);
   }
   sim.events.length = 0;
 }

@@ -1,7 +1,11 @@
+/** A voice line asked for this long ago (ms, real time) is no longer news: skip it. */
+const VOICE_STALE_MS = 8_000;
+
 /**
  * Synthesized cabin audio (harvested from the Apollo build): engine rumble,
  * RCS pops, the master alarm — plus quindar tones bracketing each CAPCOM
- * call. Web Audio only; silence is part of the design.
+ * call, and the real Apollo 11 air-to-ground at the big moments. Web Audio
+ * only; silence is part of the design.
  */
 export class Audio {
   private ctx: AudioContext | null = null;
@@ -10,6 +14,9 @@ export class Audio {
   private engineFilter!: BiquadFilterNode;
   private alarm: { osc: OscillatorNode; timer: number } | null = null;
   private lastRcs = 0;
+  private voiceGain!: GainNode;
+  private readonly clips = new Map<string, Promise<AudioBuffer | null>>();
+  private voiceQueue: Promise<void> = Promise.resolve();
 
   /** Must be called from a user gesture (autoplay policy). */
   init(): void {
@@ -19,6 +26,9 @@ export class Audio {
     this.master = ctx.createGain();
     this.master.gain.value = 0.45;
     this.master.connect(ctx.destination);
+    this.voiceGain = ctx.createGain();
+    this.voiceGain.gain.value = 1.6;
+    this.voiceGain.connect(this.master);
 
     const hum = ctx.createOscillator();
     hum.frequency.value = 118;
@@ -67,6 +77,40 @@ export class Audio {
     if (now - this.lastRcs < 70) return;
     this.lastRcs = now;
     this.blip(1800, 0.05, 0.12, 'bandpass');
+  }
+
+  /**
+   * Play a mission-audio clip (public/audio/apollo11/<id>.mp3). Lines queue
+   * behind the one playing, and one that waited too long (time warp) is
+   * dropped rather than played late.
+   */
+  voice(id: string): void {
+    if (!this.ctx) return;
+    const asked = performance.now();
+    const clip = this.clip(id);
+    this.voiceQueue = this.voiceQueue.then(async () => {
+      const buffer = await clip;
+      if (!buffer || !this.ctx || performance.now() - asked > VOICE_STALE_MS) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(this.voiceGain);
+      await new Promise<void>((done) => {
+        src.onended = () => done();
+        src.start();
+      });
+    });
+  }
+
+  private clip(id: string): Promise<AudioBuffer | null> {
+    let clip = this.clips.get(id);
+    if (!clip) {
+      clip = fetch(`${import.meta.env.BASE_URL}audio/apollo11/${id}.mp3`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`))))
+        .then((data) => this.ctx!.decodeAudioData(data))
+        .catch(() => null); // missing audio never stops the flight
+      this.clips.set(id, clip);
+    }
+    return clip;
   }
 
   /** Quindar: the 2525 Hz intro tone of a CAPCOM transmission. */

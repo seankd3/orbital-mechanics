@@ -18,6 +18,8 @@ export type Tone = 'info' | 'good' | 'warn' | 'bad';
 export interface SimEvent {
   text: string;
   tone: Tone;
+  /** A mission-audio clip that goes with this moment (see ui/audio). */
+  voice?: string;
 }
 
 export interface Contact {
@@ -132,8 +134,8 @@ export class Simulation {
     return { range, rangeRate: range > 0 ? pos.dot(vel) / range : 0, pos, vel };
   }
 
-  emit(text: string, tone: Tone = 'info'): void {
-    this.events.push({ text, tone });
+  emit(text: string, tone: Tone = 'info', voice?: string): void {
+    this.events.push({ text, tone, voice });
   }
 
   /** Invalidate cached conics after an outside change to craft state. */
