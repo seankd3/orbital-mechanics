@@ -21,7 +21,9 @@ chapters, from TLI to splashdown, with flight-director cues. See `DESIGN.md`.
   - DOI, and TEI to the −6.5° entry corridor.
   - Lambert TPI and braking.
 - **Piloting set pieces.**
-  - E-guidance powered descent (P63/P64/P66) to a graded touchdown.
+  - E-guidance powered descent (P63/P64/P66) to a graded touchdown, with
+    the crew's automation: auto-throttle through P63/P64, and in P66 a
+    rate-of-descent hold that Shift/Ctrl adjust.
   - P12 ascent timed to the CSM.
   - RCS prox ops and docking.
   - Lifting entry with bank guidance, reefed drogues and three mains.
@@ -30,14 +32,14 @@ chapters, from TLI to splashdown, with flight-director cues. See `DESIGN.md`.
   - An auto-framed top-down map with patched-conic paths and forecasts.
   - A surface patch for low flight (grids, craters, drop-line) and an
     ocean grid for splashdown.
-- **Tests (45).**
+- **Tests (44).**
   - Orbit and physics.
   - Coast determinism across warp.
   - Targeting flown against its own prediction (TLI perilune within 2 cm
     after a 3-day coast).
   - Guidance.
   - The whole mission on AUTO.
-  - Hand-flown and failure paths.
+  - Hand-flown paths (TLI and landing for three stars) and failure paths.
 
 ### Changed
 - One patched-conic propagator is used for flight, drawing and targeting.
