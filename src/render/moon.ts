@@ -27,10 +27,15 @@ function craters(): [number, number, number][] {
 export function createMoon(): Group {
   const group = new Group();
   group.add(new Mesh(new SphereGeometry(R * 0.998, 96, 64), new MeshBasicMaterial({ color: VOID })));
-  group.add(graticule(R * 1.0002, 30, lineMaterial({ color: FAINT, width: 1 }), 15));
+  group.add(graticule(R * 1.0002, 30, lineMaterial({ color: FAINT, width: 1, fade: true }), 15));
   const pts: number[] = [];
-  for (const [lat, lon, size] of craters()) ringOnSphere(pts, R * 1.0004, lat, lon, R * size);
-  group.add(segments(pts, lineMaterial({ color: MOON_LINE, width: 1.25, opacity: 0.75 })));
+  const features: number[] = [];
+  for (const [lat, lon, size] of craters()) {
+    const before = pts.length;
+    ringOnSphere(pts, R * 1.0004, lat, lon, R * size);
+    for (let i = before; i < pts.length; i += 6) features.push(2 * R * size); // rim diameter
+  }
+  group.add(segments(pts, lineMaterial({ color: MOON_LINE, width: 1.25, opacity: 0.75, fade: true }), features));
   return group;
 }
 

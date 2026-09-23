@@ -1,8 +1,8 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial, Matrix4, Vector3, type Color } from 'three';
 import type { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import type { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { RENDER_SCALE } from '../constants';
-import { lineMaterial, segments } from './lines';
+import { lineMaterial, segmentGeometry, segments, type VectorLineMaterial } from './lines';
 import { VOID } from './palette';
 
 const CELL = 5_000; // m — the patch re-centers on this lattice so lines never swim
@@ -18,6 +18,7 @@ const COARSE = 10_000; // m grid out to the edge
 export class SurfacePatch {
   readonly group = new Group();
   private readonly lines: LineSegments2;
+  private readonly material: VectorLineMaterial;
   private readonly ground: Mesh;
   private key = '';
 
@@ -27,7 +28,9 @@ export class SurfacePatch {
     private readonly cratered: boolean,
   ) {
     this.ground = new Mesh(capGeometry(radius - 0.5, EXTENT), new MeshBasicMaterial({ color: VOID }));
-    this.lines = segments([], lineMaterial({ color, width: 1, opacity: 0.8 }));
+    // Grid cells and craters fade out as they shrink toward the horizon (no moiré).
+    this.material = lineMaterial({ color, width: 1, opacity: 0.8, fade: true });
+    this.lines = segments([], this.material, []);
     this.group.add(this.ground, this.lines);
     this.group.visible = false;
   }
@@ -54,18 +57,20 @@ export class SurfacePatch {
   private buildLines(lat: number, lon: number): LineSegmentsGeometry {
     const R = this.radius;
     const pts: number[] = [];
+    const features: number[] = []; // per segment: grid spacing or crater diameter (render units)
     const onSphere = (x: number, z: number) => new Vector3(x, R, z).setLength(R + 0.5).multiplyScalar(RENDER_SCALE);
-    const segment = (x0: number, z0: number, x1: number, z1: number, n: number) => {
+    const segment = (x0: number, z0: number, x1: number, z1: number, n: number, feature: number) => {
       for (let i = 0; i < n; i++) {
         const a = onSphere(x0 + ((x1 - x0) * i) / n, z0 + ((z1 - z0) * i) / n);
         const b = onSphere(x0 + ((x1 - x0) * (i + 1)) / n, z0 + ((z1 - z0) * (i + 1)) / n);
         pts.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        features.push(feature * RENDER_SCALE);
       }
     };
     const grid = (spacing: number, half: number, n: number) => {
       for (let u = -half; u <= half; u += spacing) {
-        segment(u, -half, u, half, n);
-        segment(-half, u, half, u, n);
+        segment(u, -half, u, half, n, spacing);
+        segment(-half, u, half, u, n, spacing);
       }
     };
     grid(100, 1_500, 30); // touchdown scale
@@ -103,7 +108,7 @@ export class SurfacePatch {
         }
       }
     }
-    return new LineSegmentsGeometry().setPositions(pts);
+    return segmentGeometry(pts, this.material, features);
 
     function crater(x: number, z: number, r: number) {
       const n = 16;
@@ -113,6 +118,7 @@ export class SurfacePatch {
         const p = onSphere(x + r * Math.cos(a), z + r * Math.sin(a));
         const q = onSphere(x + r * Math.cos(b), z + r * Math.sin(b));
         pts.push(p.x, p.y, p.z, q.x, q.y, q.z);
+        features.push(2 * r * RENDER_SCALE);
       }
     }
   }
