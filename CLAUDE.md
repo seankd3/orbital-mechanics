@@ -37,18 +37,23 @@ stay primary-relative.
   - `burn.ts` / `executor.ts` handle finite burns and the P40 executor.
   - `targeting.ts` holds the mission solvers; `lambert.ts` solves Lambert's
     problem.
-  - `guidance.ts` holds the descent, ascent, entry and docking laws.
+  - `guidance.ts` holds the descent (P63, P64 to a landing site, P66),
+    ascent, entry and docking laws.
+  - `terrain.ts` is the boulder field at the landing site; a hazard under
+    a footpad tips the LM over at contact.
   - `vehicles.ts` has stage data; `spacecraft.ts` is one craft.
 - `src/game/` is the campaign.
   - `chapter.ts` holds the types.
-  - `chapters/` holds the nine chapter definitions.
+  - `chapters/` holds the nine chapter definitions. `descent.ts` carries
+    the landing drama: program alarms, high gate, the LPD, fuel calls.
   - `director.ts` runs a chapter's phases, AUTO, warp targets and grading.
   - `nominal.ts` builds the launch state and the AUTO chain of chapter
     starts.
   - `campaign.ts` holds progress in localStorage.
 - `src/render/` holds `stage`, `camera` (horizon-frame chase; auto-framed
   map), `world` (per-frame placement), `trajectory`, `surface` (the
-  low-altitude patch), `ship`, `planet`, `moon`, `starfield` and `labels`.
+  low-altitude patch), `boulders` (the field and the LPD reticle), `ship`,
+  `planet`, `moon`, `starfield` and `labels`.
   - `lines` is the only way to draw a line: analytically anti-aliased
     screen-space strokes. Widths are in CSS px, coverage is applied in
     linear light, and strokes combine by MAX. `LineBuffer` handles lines
