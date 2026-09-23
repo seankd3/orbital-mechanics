@@ -13,7 +13,7 @@ import {
   MeshBasicMaterial,
   Vector3,
 } from 'three';
-import { SHIP } from '../constants';
+
 
 const FACE = new MeshBasicMaterial({ color: new Color('#010804') });
 const EDGE = new LineBasicMaterial({ color: new Color('#9dffbb') });
@@ -101,7 +101,7 @@ export function createShip(): ShipView {
   plume.visible = false;
   ship.add(plume);
 
-  ship.scale.setScalar(SHIP.visualScale);
+
 
   let hasBooster = true;
   return {
@@ -183,7 +183,7 @@ export function createLmView(): ShipView {
   plume.visible = false;
   lm.add(plume);
 
-  lm.scale.setScalar(SHIP.visualScale);
+
 
   let stagedNow = false;
   return {
