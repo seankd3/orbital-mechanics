@@ -1,88 +1,69 @@
 import {
+  BufferAttribute,
   BufferGeometry,
-  Color,
   Group,
-  Line,
   LineBasicMaterial,
-  LineLoop,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   SphereGeometry,
   Vector3,
 } from 'three';
 import { MOON, RENDER_SCALE } from '../constants';
+import { FAINT, MOON_LINE, VOID } from './palette';
+import { graticule } from './planet';
 
 const R = MOON.radius * RENDER_SCALE;
 
-/** Airless vector Moon: occluder + sparse gray graticule + crater rings. */
+/** Deterministic crater field: [lat, lon, radius as a fraction of R]. */
+function craters(): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 90; i++) {
+    const lat = Math.asin(rand() * 2 - 1) * (180 / Math.PI);
+    const lon = rand() * 360;
+    const size = 0.015 + 0.09 * rand() ** 3;
+    out.push([lat, lon, size]);
+  }
+  return out;
+}
+
+/**
+ * Vector Moon: black occluder, sparse graticule and a crater field.
+ * Rotate the group by the Moon's spin so the near side faces Earth.
+ */
 export function createMoon(): Group {
   const group = new Group();
-
-  group.add(
-    new Mesh(
-      new SphereGeometry(R * 0.996, 32, 24),
-      new MeshBasicMaterial({ color: new Color('#0a0d0b') }),
-    ),
-  );
-
-  const mat = new LineBasicMaterial({ color: new Color('#8fae9a'), transparent: true, opacity: 0.9 });
-
-  for (let lat = -60; lat <= 60; lat += 30) {
-    const phi = (lat * Math.PI) / 180;
-    const ringR = R * Math.cos(phi);
-    const y = R * Math.sin(phi);
-    const pts: Vector3[] = [];
-    for (let i = 0; i <= 64; i++) {
-      const t = (i / 64) * Math.PI * 2;
-      pts.push(new Vector3(ringR * Math.cos(t), y, ringR * Math.sin(t)));
-    }
-    group.add(new LineLoop(new BufferGeometry().setFromPoints(pts), mat));
-  }
-  for (let lon = 0; lon < 180; lon += 30) {
-    const theta = (lon * Math.PI) / 180;
-    const pts: Vector3[] = [];
-    for (let i = 0; i <= 64; i++) {
-      const t = (i / 64) * Math.PI * 2;
-      const x = R * Math.cos(t);
-      const y = R * Math.sin(t);
-      pts.push(new Vector3(x * Math.cos(theta), y, x * Math.sin(theta)));
-    }
-    group.add(new Line(new BufferGeometry().setFromPoints(pts), mat));
-  }
-
-  // A few named-mare-scale crater rings for character (deterministic layout).
-  const craters: [number, number, number][] = [
-    [10, 35, 0.16], [-8, -20, 0.1], [25, -55, 0.12], [-30, 60, 0.08],
-    [45, 10, 0.07], [-15, 100, 0.13], [5, -110, 0.09], [-45, -80, 0.1],
-  ];
-  for (const [lat, lon, size] of craters) {
-    group.add(craterRing(lat, lon, R * size, mat));
-  }
-
+  group.add(new Mesh(new SphereGeometry(R * 0.998, 96, 64), new MeshBasicMaterial({ color: VOID })));
+  group.add(graticule(R * 1.0002, 30, new LineBasicMaterial({ color: FAINT }), 15));
+  const pts: number[] = [];
+  for (const [lat, lon, size] of craters()) ringOnSphere(pts, R * 1.0004, lat, lon, R * size);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+  group.add(new LineSegments(g, new LineBasicMaterial({ color: MOON_LINE, transparent: true, opacity: 0.75 })));
   return group;
 }
 
-function craterRing(latDeg: number, lonDeg: number, radius: number, mat: LineBasicMaterial): LineLoop {
+/** A small circle on a sphere (crater rim), appended as segments. */
+export function ringOnSphere(out: number[], radius: number, latDeg: number, lonDeg: number, size: number, n = 28): void {
   const lat = (latDeg * Math.PI) / 180;
   const lon = (lonDeg * Math.PI) / 180;
-  const center = new Vector3(
-    Math.cos(lat) * Math.cos(lon),
-    Math.sin(lat),
-    -Math.cos(lat) * Math.sin(lon),
-  );
-  // Local tangent basis at the crater center.
+  const c = new Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon));
   const east = new Vector3(-Math.sin(lon), 0, -Math.cos(lon));
-  const north = new Vector3().crossVectors(center, east).normalize();
-
-  const pts: Vector3[] = [];
-  for (let i = 0; i < 32; i++) {
-    const t = (i / 32) * Math.PI * 2;
-    const p = center
+  const north = new Vector3().crossVectors(c, east).normalize().negate();
+  const at = (i: number) => {
+    const t = (i / n) * Math.PI * 2;
+    return c
       .clone()
-      .multiplyScalar(R * 1.0005)
-      .addScaledVector(east, radius * Math.cos(t))
-      .addScaledVector(north, radius * Math.sin(t));
-    pts.push(p.normalize().multiplyScalar(R * 1.0005));
+      .multiplyScalar(radius)
+      .addScaledVector(east, size * Math.cos(t))
+      .addScaledVector(north, size * Math.sin(t))
+      .setLength(radius);
+  };
+  for (let i = 0; i < n; i++) {
+    const a = at(i);
+    const b = at(i + 1);
+    out.push(a.x, a.y, a.z, b.x, b.y, b.z);
   }
-  return new LineLoop(new BufferGeometry().setFromPoints(pts), mat);
 }

@@ -80,8 +80,8 @@ export class Director {
     if (this.guide?.phase === 'paused') this.guide.accept();
   }
 
-  /** Re-solve the current burn around a new ignition center (map drag). */
-  replan(tig: number): boolean {
+  /** Re-solve the current burn around a new ignition center (map drag), or restore the default. */
+  replan(tig?: number): boolean {
     const p = this.phase;
     if (p?.kind !== 'burn' || !this.guide || this.guide.litAt !== null) return false;
     const m = p.solve(this.ctx, tig);
@@ -111,7 +111,15 @@ export class Director {
     if (this.status !== 'flying') return;
     const sim = this.sim;
     const p = this.phase;
-    if (p?.kind === 'burn' && this.guide) this.guide.update(sim.ship, sim.met);
+    if (p?.kind === 'burn' && this.guide) {
+      this.guide.update(sim.ship, sim.met);
+      // A hand cutoff needs real time: drop warp for the last seconds of a burn.
+      const accel = sim.ship.stage.thrust / sim.ship.mass;
+      if (this.guide.phase === 'burning' && sim.warp > 1 && this.guide.remaining(sim.ship) < accel * 8) {
+        sim.warp = 1;
+        sim.emit('WARP OFF — CUTOFF COMING UP', 'warn');
+      }
+    }
 
     const reason = sim.outcome?.kind === 'lost' ? sim.outcome.reason : this.chapter.failed?.(this.ctx) ?? null;
     if (reason) {
