@@ -1,42 +1,53 @@
-/** Display helpers — everything the HUD prints goes through here. */
+/** Display helpers — everything CAPCOM and the HUD print goes through here. */
 
-export function fmtDistance(meters: number): string {
+export function km(meters: number, digits = 0): string {
+  if (!isFinite(meters)) return '∞';
+  const k = meters / 1000;
+  return `${k.toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: digits })} KM`;
+}
+
+/** Distance that reads well from docking range to cislunar space. */
+export function range(meters: number): string {
   if (!isFinite(meters)) return '—';
-  const km = meters / 1000;
-  if (Math.abs(km) >= 100_000) return `${(km / 1000).toFixed(1)} Mm`;
-  return `${km.toLocaleString('en-US', { maximumFractionDigits: km < 100 ? 1 : 0 })} km`;
+  if (Math.abs(meters) < 10_000) return `${Math.round(meters).toLocaleString('en-US')} M`;
+  return km(meters, Math.abs(meters) < 100_000 ? 1 : 0);
 }
 
-export function fmtSpeed(ms: number): string {
+export function speed(ms: number, digits = 0): string {
   if (!isFinite(ms)) return '—';
-  return `${ms.toLocaleString('en-US', { maximumFractionDigits: 0 })} m/s`;
+  return `${ms.toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: digits })} M/S`;
 }
 
-export function fmtPeriod(seconds: number): string {
-  if (!isFinite(seconds)) return 'ESCAPE';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}h ${pad(m)}m`;
-  return `${pad(m)}:${pad(s)}`;
+/** Clock-style duration: 04:12, 1:04:12, 2D 01:04:12. */
+export function clock(seconds: number): string {
+  if (!isFinite(seconds)) return '—';
+  const t = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(t / 86_400);
+  const h = Math.floor((t % 86_400) / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const mmss = `${pad(m)}:${pad(s)}`;
+  if (d > 0) return `${d}D ${pad(h)}:${mmss}`;
+  return h > 0 ? `${h}:${mmss}` : mmss;
 }
 
-export function fmtMet(seconds: number): string {
-  const total = Math.floor(seconds);
-  const d = Math.floor(total / 86400);
-  const h = Math.floor((total % 86400) / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const core = `${pad(h)}:${pad(m)}:${pad(s)}`;
-  return d > 0 ? `T+${d}d ${core}` : `T+${core}`;
+/** Mission elapsed time, Apollo style: 075:49:32. */
+export function met(seconds: number): string {
+  const t = Math.max(0, Math.floor(seconds));
+  return `${String(Math.floor(t / 3600)).padStart(3, '0')}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}`;
 }
 
-export function fmtWarp(warp: number): string {
-  return warp >= 1000 ? `${warp / 1000}k×` : `${warp}×`;
+export function degrees(rad: number, digits = 1): string {
+  return `${((rad * 180) / Math.PI).toFixed(digits)}°`;
 }
 
-export function fmtDegrees(rad: number): string {
-  return `${((rad * 180) / Math.PI).toFixed(1)}°`;
+export function warp(w: number): string {
+  if (w >= 1000) return `${(w / 1000).toLocaleString('en-US')}K×`;
+  return `${Math.round(w)}×`;
+}
+
+export function signed(v: number, digits = 1): string {
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(digits)}`;
 }
 
 function pad(n: number): string {
