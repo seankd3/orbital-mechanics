@@ -41,7 +41,8 @@ export function burnSay(ctx: Ctx, intro: string): string {
   if (g.phase === 'burning') {
     const left = g.remaining(ship);
     if (left < 0) return `OVERBURN ${speed(-left, 1)} — CUT IT, X!`;
-    return left < 30 ? `COMING UP ON CUTOFF… X AT ZERO. SHIFT/CTRL TO FEATHER.` : `GOOD BURN. WATCH ΔV TO GO — X TO CUT OFF AT ZERO.`;
+    if (left < 30) return 'COMING UP ON CUTOFF… X AT ZERO. CTRL FEATHERS THE THROTTLE.';
+    return g.duration > 60 ? 'GOOD BURN. PERIOD (.) WARPS IT UP TO 10×. X TO CUT OFF AT ZERO.' : 'GOOD BURN. WATCH ΔV TO GO — X TO CUT OFF AT ZERO.';
   }
   if (t > 120) return `${intro} IGNITION IN ${clock(t)} — G WARPS THERE.`;
   if (offCue > 3) return `IGNITION IN ${clock(t)}. GET ON THE ◇ CUE — WASD/QE, OR F TO HOLD IT.`;

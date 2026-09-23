@@ -128,6 +128,12 @@ export function predictBurn(now: FlightState, engine: Engine, m: Maneuver, horiz
   return { atTig, ignition, duration, cutoff, arcs };
 }
 
+/** Predict the rest of a burn in progress: the Δv still to go, from now, then coast. */
+export function predictRemaining(now: FlightState, engine: Engine, toGo: Vector3, horizon: number): Arc[] {
+  const cutoff = toGo.lengthSq() > 1e-6 ? integrateBurn(now, engine, toGo) : now;
+  return predictPath(cutoff.primary, cutoff.pos, cutoff.vel, cutoff.t, cutoff.t + horizon);
+}
+
 /** Predicted path with no burn. */
 export function predictCoast(now: FlightState, horizon: number): Arc[] {
   return predictPath(now.primary, now.pos, now.vel, now.t, now.t + horizon);
