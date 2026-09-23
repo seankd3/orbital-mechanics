@@ -97,7 +97,8 @@ export const MIDCOURSE: Chapter = {
     // Only once MCC-2 is behind you: before that, the burn can still fix it.
     if (!ctx.memo.coasting) return null;
     const p = approach(ctx);
-    return p !== null && Math.abs(p) < R + 20_000 ? 'IMPACT TRAJECTORY — PERILUNE BELOW 20 KM' : null;
+    if (p === null) return 'NO LUNAR ENCOUNTER — THE COAST MISSES THE MOON';
+    return Math.abs(p) < R + 20_000 ? 'IMPACT TRAJECTORY — PERILUNE BELOW 20 KM' : null;
   },
   grade(ctx) {
     const err = periluneError(ctx);
@@ -127,6 +128,7 @@ export const LOI: Chapter = {
   ],
   failed: (ctx) => {
     const o = ctx.sim.orbit;
+    if (ctx.sim.primary !== MOON_BODY) return 'NOT CAPTURED — COLUMBIA FLEW PAST THE MOON';
     if (ctx.guide?.phase !== 'done' && ctx.sim.ship.fuel > 0) return null;
     return o.closed ? null : 'NOT CAPTURED — COLUMBIA IS FLYING PAST THE MOON';
   },
