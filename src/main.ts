@@ -111,6 +111,8 @@ function command(cmd: Command): void {
     if (cmd === 'down') menuSel = Math.min(campaign.data.unlocked, menuSel + 1);
     if (cmd === 'up' || cmd === 'down') openMenu();
     if (cmd === 'enter') flyFromMenu(menuSel);
+    const resume = campaign.data.resume;
+    if (cmd === 'continue' && resume) startChapter(resume.chapter, resume.start);
     return;
   }
   if (cmd === 'menu') return openMenu();

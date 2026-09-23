@@ -102,5 +102,5 @@ const HELP: [string, string][] = [
 
 export function renderHelp(): void {
   document.getElementById('help')!.innerHTML =
-    '<h4>KEYS</h4>' + HELP.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
+    '<h4>KEYS</h4>' + HELP.map(([k, v]) => `<span class="k">${k}</span><span class="d">${v}</span>`).join('');
 }

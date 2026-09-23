@@ -26,7 +26,10 @@ export function forecast(arcs: Arc[] | null): string {
   if (!arcs?.length) return '—';
   const p = perilune(arcs);
   const first = arcs[0];
-  if (first.primary === EARTH_BODY && p !== null) return `PERILUNE ${km(Math.abs(p) - MOON_BODY.radius)}`;
+  if (first.primary === EARTH_BODY && p !== null) {
+    const alt = Math.abs(p) - MOON_BODY.radius;
+    return alt < 0 ? 'LUNAR IMPACT' : `PERILUNE ${km(alt)}`;
+  }
   const home = first.primary === MOON_BODY && !first.orbit.closed ? earthArc(arcs) : null;
   if (home) {
     const g = entryAngle(home.orbit);

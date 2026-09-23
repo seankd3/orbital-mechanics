@@ -41,15 +41,19 @@ export const TLI: Chapter = {
     ctx.sim.ship.dropStage();
     ctx.sim.emit('S-IVB SEP — TRANSPOSITION AND DOCKING COMPLETE', 'good');
   },
-  failed: (ctx) =>
-    ctx.sim.ship.fuel <= 0 && ctx.guide && ctx.guide.remaining(ctx.sim.ship) > 50 ? 'S-IVB DEPLETED SHORT OF TLI' : null,
+  failed: (ctx) => {
+    const g = ctx.guide;
+    if (ctx.sim.ship.fuel <= 0 && g && g.remaining(ctx.sim.ship) > 50) return 'S-IVB DEPLETED SHORT OF TLI';
+    // Judged at cutoff: no encounter at all can't be fixed downstream.
+    return g?.phase === 'done' && approach(ctx) === null ? 'NO LUNAR ENCOUNTER — THE BURN MISSED THE MOON' : null;
+  },
   grade(ctx) {
     const err = periluneError(ctx);
     const p = approach(ctx);
     return {
       stars: starsFor(err, [500e3, 2_500e3, 30_000e3], ctx),
       lines: [
-        line('PREDICTED PERILUNE', p === null ? 'MISSES THE MOON' : km(Math.abs(p) - R), err < 2_500e3),
+        line('PREDICTED PERILUNE', p === null ? 'MISSES THE MOON' : Math.abs(p) < R ? 'LUNAR IMPACT' : km(Math.abs(p) - R), err < 2_500e3),
         line('TARGET', km(Math.abs(TARGET.perilune) - R), true),
       ],
     };
@@ -78,18 +82,22 @@ export const MIDCOURSE: Chapter = {
         }
         return ctx.memo.soi;
       },
-      enter: (ctx) => void delete ctx.memo.soi,
+      enter: (ctx) => {
+        delete ctx.memo.soi;
+        ctx.memo.coasting = 1;
+      },
       say: (ctx) => {
         const p = approach(ctx);
         const left = (ctx.memo.soi ?? ctx.sim.met) - ctx.sim.met;
-        return `PERILUNE ${p === null ? '—' : km(Math.abs(p) - R)}. THE MOON'S SPHERE OF INFLUENCE IN ${clock(left)} — G TO COAST THERE.`;
+        return `PERILUNE ${p === null ? '—' : Math.abs(p) < R ? 'BELOW THE SURFACE' : km(Math.abs(p) - R)}. THE MOON'S SPHERE OF INFLUENCE IN ${clock(left)} — G TO COAST THERE.`;
       },
     },
   ],
   failed: (ctx) => {
+    // Only once MCC-2 is behind you: before that, the burn can still fix it.
+    if (!ctx.memo.coasting) return null;
     const p = approach(ctx);
-    if (ctx.sim.ship.firing || p === null) return null;
-    return Math.abs(p) < R + 20_000 ? 'IMPACT TRAJECTORY — PERILUNE BELOW 20 KM' : null;
+    return p !== null && Math.abs(p) < R + 20_000 ? 'IMPACT TRAJECTORY — PERILUNE BELOW 20 KM' : null;
   },
   grade(ctx) {
     const err = periluneError(ctx);
