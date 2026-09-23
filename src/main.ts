@@ -71,7 +71,15 @@ function openMenu(): void {
 /** Chapters picked from the menu fly from the nominal flight's state. */
 function flyFromMenu(i: number): void {
   showBusy('COMPUTING THE NOMINAL TRAJECTORY…');
-  setTimeout(() => startChapter(i, nominal.start(i)), 30);
+  setTimeout(() => {
+    try {
+      startChapter(i, nominal.start(i));
+    } catch (e) {
+      openMenu();
+      notify('NOMINAL TRAJECTORY FAILED — SEE CONSOLE', 'warn');
+      throw e;
+    }
+  }, 30);
 }
 
 function startChapter(i: number, start: Snapshot): void {
@@ -155,7 +163,9 @@ function command(cmd: Command): void {
       break;
     case 'auto':
       director.toggleAuto();
-      notify(director.auto ? 'AUTO — THE COMPUTER HAS IT (MAX ★★)' : 'MANUAL CONTROL', 'warn');
+      // Taking a lit burn back: keep the attitude on the cue; cutoff is yours.
+      if (!director.auto && ship.firing && director.cue?.dir) holdCue = true;
+      notify(director.auto ? 'AUTO — THE COMPUTER HAS IT (MAX ★★)' : holdCue ? 'MANUAL — HOLDING THE CUE, X TO CUT OFF' : 'MANUAL CONTROL', 'warn');
       break;
     case 'map': rig.setMode(rig.mode === 'map' ? 'chase' : 'map'); break;
     case 'focus':
@@ -165,8 +175,7 @@ function command(cmd: Command): void {
       break;
     case 'enter': director.accept(); break;
     case 'replan':
-      if (director.maneuver) director.replan();
-      notify('BURN RESTORED TO THE COMPUTER SOLUTION');
+      notify(director.replan() ? 'BURN RESTORED TO THE COMPUTER SOLUTION' : 'NO UNLIT BURN TO RESTORE');
       break;
     case 'warp-next': {
       const t = director.nextEvent;
