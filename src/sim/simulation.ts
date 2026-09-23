@@ -97,6 +97,11 @@ export class Simulation {
     return this.ship.position.length() - this.primary.radius;
   }
 
+  /** Current canopy's inflation, 0..1. */
+  get chuteOpen(): number {
+    return this.chutes === 'none' ? 0 : Math.min(1, (this.met - this.chuteAt) / CM_AERO.inflation);
+  }
+
   get inAtmosphere(): boolean {
     // 1 m of hysteresis: a rails coast stops exactly *at* the interface.
     return this.primary.atmosphere > 0 && this.altitude < this.primary.atmosphere + 1;
@@ -327,7 +332,7 @@ export class Simulation {
     }
     // Reefed canopies open progressively instead of snapping to full area.
     const [from, to] = this.chutes === 'drogue' ? [CM_AERO.cdA, CM_AERO.drogue.cdA] : [CM_AERO.drogue.cdA, CM_AERO.mains.cdA];
-    const open = Math.min(1, (this.met - this.chuteAt) / CM_AERO.inflation);
+    const open = this.chuteOpen;
     return { cdA: from + (to - from) * open * open, liftToDrag: 0 };
   }
 
