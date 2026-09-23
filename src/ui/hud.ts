@@ -1,187 +1,205 @@
-import { orbitGuardLabel } from '../sim/apollo';
-import { meanMotion, trueToMeanAnomaly } from '../sim/physics';
-import type { MissionLog } from '../sim/missions';
+import { EARTH_BODY, MOON_BODY } from '../sim/bodies';
+import type { Arc } from '../sim/coast';
+import { localFrame, currentBank } from '../sim/guidance';
 import type { Simulation } from '../sim/simulation';
-import { fmtDegrees, fmtDistance, fmtMet, fmtPeriod, fmtSpeed, fmtWarp } from './format';
+import { earthArc, entryAngle, perilune } from '../sim/targeting';
+import type { Director } from '../game/director';
+import { CHAPTERS } from '../game/chapters';
+import { clock, degrees, km, met, range, speed, warp } from './format';
 
-const el = (id: string) => document.getElementById(id)!;
+const $ = (id: string) => document.getElementById(id)!;
 
+type Row = [label: string, value: string, cls?: string];
+
+function rows(list: Row[]): string {
+  return list.map(([k, v, cls]) => `<div class="row"><span class="k">${k}</span><b class="${cls ?? ''}">${v}</b></div>`).join('');
+}
+
+function bar(fraction: number, bug?: number, low = false): string {
+  const w = Math.max(0, Math.min(1, fraction)) * 100;
+  const b = bug === undefined ? '' : `<span class="bug" style="left:${Math.max(0, Math.min(1, bug)) * 100}%"></span>`;
+  return `<div class="bar${low ? ' low' : ''}"><i style="width:${w}%"></i>${b}</div>`;
+}
+
+/** What a path achieves, in the terms the current burn cares about. */
+export function forecast(arcs: Arc[] | null): string {
+  if (!arcs?.length) return '—';
+  const p = perilune(arcs);
+  const first = arcs[0];
+  if (first.primary === EARTH_BODY && p !== null) {
+    const alt = Math.abs(p) - MOON_BODY.radius;
+    return alt < 0 ? 'LUNAR IMPACT' : `PERILUNE ${km(alt)}`;
+  }
+  const home = first.primary === MOON_BODY && !first.orbit.closed ? earthArc(arcs) : null;
+  if (home) {
+    const g = entryAngle(home.orbit);
+    return g > 0 ? 'MISSES EARTH' : `ENTRY ${degrees(g, 2)}`;
+  }
+  const o = first.orbit;
+  const R = first.primary.radius;
+  if (!o.closed) return 'ESCAPE';
+  if (o.periapsis < R) return `SUBORBITAL · AP ${km(o.apoapsis - R, 1)}`;
+  return `${km(o.periapsis - R, o.periapsis - R < 50e3 ? 1 : 0)} × ${km(o.apoapsis - R)}`;
+}
+
+/** DOM flight instruments. */
 export class Hud {
-  private readonly body = el('body');
-  private readonly alt = el('alt');
-  private readonly vel = el('vel');
-  private readonly apo = el('apo');
-  private readonly peri = el('peri');
-  private readonly ecc = el('ecc');
-  private readonly inc = el('inc');
-  private readonly period = el('period');
-  private readonly tap = el('tap');
-  private readonly tpe = el('tpe');
-  private readonly guard = el('guard');
-  private readonly guidance = el('guidance');
-  private readonly craft = el('craft');
-  private readonly fuelLabel = el('fuel-label');
-  private readonly tgtDist = el('tgt-dist');
-  private readonly tgtRvel = el('tgt-rvel');
-  private readonly sas = el('sas');
-  private readonly engine = el('engine');
-  private readonly dv = el('dv');
-  private readonly throttleBar = el('throttle-bar');
-  private readonly throttlePct = el('throttle-pct');
-  private readonly fuelBar = el('fuel-bar');
-  private readonly fuelPct = el('fuel-pct');
-  private readonly rcsBar = el('rcs-bar');
-  private readonly rcsPct = el('rcs-pct');
-  private readonly met = el('met');
-  private readonly warp = el('warp');
-  private readonly warpBox = el('warp-box');
-  private readonly camMode = el('cam-mode');
-  private readonly missionList = el('mission-list');
-  private readonly node = {
-    state: el('node-state'),
-    total: el('node-total'),
-    tig: el('node-tig'),
-    burn: el('node-burn'),
-    align: el('node-align'),
-    ap: el('node-ap'),
-    pe: el('node-pe'),
-    pro: el('node-pro'),
-    nrm: el('node-nrm'),
-    rad: el('node-rad'),
-  };
-  private lastMissionKey = '';
+  private lastCall = '';
+  private revealAt = 0;
+  onTransmission: (() => void) | null = null;
 
-  update(sim: Simulation, missions: MissionLog, mapMode: boolean): void {
-    const e = sim.elements;
+  update(sim: Simulation, d: Director | null, view: { map: boolean; hold: boolean; plan: Arc[] | null }): void {
+    $('met').textContent = met(sim.met);
+    $('chapter').textContent = d ? `CH ${CHAPTERS.indexOf(d.chapter) + 1} · ${d.chapter.title}` : '';
+    $('warp').textContent = warp(sim.warp);
+    $('view').textContent = view.map ? 'MAP' : 'CHASE';
+    $('auto').classList.toggle('on', !!d?.auto);
+    $('hold').classList.toggle('on', view.hold);
+    this.capcom(d?.capcom ?? '');
+    this.orbit(sim);
+    this.engine(sim, d);
+    $('card').innerHTML = d ? this.card(sim, d, view.plan) : '';
+  }
+
+  private capcom(text: string): void {
+    const el = $('capcom');
+    // A new transmission (not just a countdown tick) gets quindar and a reveal.
+    const skeleton = text.replace(/[\d:.,−-]+/g, '#');
+    if (skeleton !== this.lastCall) {
+      this.lastCall = skeleton;
+      this.revealAt = performance.now();
+      if (text) this.onTransmission?.();
+    }
+    const shown = Math.floor((performance.now() - this.revealAt) / 14);
+    el.textContent = shown >= text.length ? text : text.slice(0, shown);
+  }
+
+  private orbit(sim: Simulation): void {
+    const o = sim.orbit;
+    const R = sim.primary.radius;
+    const list: Row[] = [
+      ['BODY', sim.primary.name],
+      ['ALTITUDE', range(sim.altitude)],
+      ['VELOCITY', speed(sim.ship.velocity.length())],
+    ];
+    if (sim.ship.landed) {
+      list.push(['STATUS', 'ON THE SURFACE', 'good']);
+    } else {
+      list.push(['APOAPSIS', o.closed ? range(o.apoapsis - R) : 'ESCAPE']);
+      list.push(['PERIAPSIS', o.periapsis < R ? 'SUBORBITAL' : range(o.periapsis - R), o.periapsis < R ? 'bad' : '']);
+      const tPe = o.nextPeriapsis(sim.met);
+      if (tPe !== null && tPe - sim.met < 30 * 86_400) list.push(['T PERIAPSIS', clock(tPe - sim.met)]);
+    }
+    $('orbit').innerHTML = rows(list);
+  }
+
+  private engine(sim: Simulation, d: Director | null): void {
     const ship = sim.ship;
-    const R = sim.primary.radius;
-
-    this.body.textContent = sim.primary.name;
-    this.alt.textContent = fmtDistance(sim.altitude);
-    this.vel.textContent = fmtSpeed(ship.velocity.length());
-    this.apo.textContent = isFinite(e.apoapsis) ? fmtDistance(e.apoapsis - R) : 'ESCAPE';
-    this.peri.textContent = fmtDistance(e.periapsis - R);
-    this.peri.className = e.periapsis - R < 120_000 && sim.primary.hasAtmosphere ? 'bad' : '';
-
-    this.ecc.textContent = e.eccentricity.toFixed(4);
-    this.inc.textContent = fmtDegrees(e.inclination);
-    this.period.textContent = fmtPeriod(e.period);
-    this.tap.textContent = isFinite(e.apoapsis) ? fmtPeriod(timeToAnomaly(sim, Math.PI)) : '—';
-    this.tpe.textContent = fmtPeriod(timeToAnomaly(sim, 0));
-
-    const guard = orbitGuardLabel(sim);
-    this.guard.textContent = guard.label;
-    this.guard.className = guard.ok ? 'on' : 'bad';
-
-    this.guidance.textContent = sim.apollo.statusLabel;
-    this.guidance.className = sim.apollo.statusLabel === 'MANUAL' ? 'off' : 'hot';
-
-    this.craft.textContent = sim.docked && sim.lmAlive
-      ? 'CSM+LM'
-      : `${ship.spec.label}${ship.landed ? ' · SURFACE' : ''}`;
-    this.craft.className = sim.activeId === 'lm' ? 'hot' : '';
-
-    this.sas.textContent = ship.sas ? 'ON' : 'OFF';
-    this.sas.className = ship.sas ? 'on' : 'off';
-
-    if (ship.fuel <= 0) {
-      this.engine.textContent = `${ship.stage.name} DRY`;
-      this.engine.className = 'bad';
-    } else if (ship.firing) {
-      this.engine.textContent = `${ship.stage.name} BURN`;
-      this.engine.className = 'hot';
-    } else {
-      this.engine.textContent = `${ship.stage.name} IDLE`;
-      this.engine.className = 'off';
-    }
-
-    this.dv.textContent = fmtSpeed(ship.deltaV);
-    this.throttleBar.style.width = `${Math.round(ship.throttle * 100)}%`;
-    this.throttlePct.textContent = `${Math.round(ship.throttle * 100)}%`;
-    this.fuelLabel.textContent = ship.stage.name;
-    const fuelFrac = ship.fuel / ship.stage.fuelMass;
-    this.fuelBar.style.width = `${Math.round(fuelFrac * 100)}%`;
-    this.fuelPct.textContent = `${Math.round(fuelFrac * 100)}%`;
-    const rcsFrac = ship.rcsFuel / ship.spec.rcsFuelMass;
-    this.rcsBar.style.width = `${Math.round(rcsFrac * 100)}%`;
-    this.rcsPct.textContent = `${Math.round(rcsFrac * 100)}%`;
-
-    const tgt = sim.target;
-    if (tgt) {
-      this.tgtDist.textContent = fmtDistance(tgt.distance);
-      this.tgtRvel.textContent = isNaN(tgt.relVel) ? 'LANDED' : `${tgt.relVel.toFixed(1)} m/s`;
-    } else {
-      this.tgtDist.textContent = this.tgtRvel.textContent = '—';
-    }
-
-    this.met.textContent = fmtMet(sim.met);
-    this.warp.textContent = fmtWarp(sim.warp);
-    this.warpBox.classList.toggle('warping', sim.warp > 1);
-    this.camMode.textContent = mapMode ? '· MAP' : '';
-
-    this.updateNode(sim);
-    this.renderMissions(missions);
+    const stage = ship.stage;
+    const cue = d?.cue;
+    const state = stage.thrust <= 0 ? '—' : ship.fuel <= 0 ? 'DRY' : ship.firing ? 'BURN' : 'IDLE';
+    const html =
+      rows([
+        [sim.docked && sim.lmAlive ? `${ship.spec.label}+LM` : ship.spec.label, `${stage.name} ${state}`, ship.firing ? 'plan' : ''],
+        ['THROTTLE', `${Math.round(ship.throttle * 100)}%`],
+      ]) +
+      bar(ship.throttle, cue?.throttle) +
+      rows([[stage.name === 'CM' ? 'PROPELLANT' : `${stage.name} PROP`, stage.fuelMass ? `${Math.round(ship.fuelFraction * 100)}%` : '—']]) +
+      bar(ship.fuelFraction, undefined, ship.fuelFraction < 0.1) +
+      rows([
+        ['ΔV LEFT', speed(ship.deltaV)],
+        ['RCS', `${Math.round((ship.rcsFuel / ship.spec.rcsFuelMass) * 100)}%`],
+      ]);
+    $('engine').innerHTML = html;
   }
 
-  private updateNode(sim: Simulation): void {
-    const p = sim.planner;
-    if (!p.active) {
-      this.node.state.textContent = 'NO NODE';
-      this.node.state.className = 'off';
-      this.node.total.textContent = '0 m/s';
-      this.node.tig.textContent = this.node.burn.textContent = this.node.align.textContent = '—';
-      this.node.ap.textContent = this.node.pe.textContent = '—';
-      this.node.pro.textContent = this.node.nrm.textContent = this.node.rad.textContent = '+0';
-      return;
+  private card(sim: Simulation, d: Director, plan: Arc[] | null): string {
+    const p = d.phase;
+    if (!p || d.status !== 'flying') return '';
+    if (p.kind === 'burn' && d.guide) {
+      const g = d.guide;
+      const ship = sim.ship;
+      const lit = g.litAt !== null;
+      const toIgn = g.ignition - sim.met;
+      const done = 1 - Math.max(0, g.remaining(ship)) / g.total;
+      return (
+        `<h3>${p.name} BURN</h3>` +
+        `<div class="row"><span class="k">ΔV TO GO</span><b class="big plan">${speed(g.remaining(ship), 1)}</b></div>` +
+        `<div class="meter"><i style="width:${done * 100}%"></i></div>` +
+        rows([
+          ['ΔV PLANNED', speed(g.total, 1)],
+          lit ? ['BURNING', clock(sim.met - g.litAt!)] : ['IGNITION', toIgn >= 0 ? `T−${clock(toIgn)}` : `LATE ${clock(-toIgn)}`, toIgn < 0 ? 'bad' : ''],
+          ['BURN TIME', clock(g.duration)],
+          ['ATTITUDE', `${((ship.forward.angleTo(g.cue(ship)) * 180) / Math.PI).toFixed(1)}° OFF`, ship.forward.angleTo(g.cue(ship)) < 0.035 ? 'good' : 'plan'],
+          ['RESULT', forecast(plan), 'plan'],
+        ])
+      );
     }
-    this.node.state.textContent = p.burnActive ? 'BURNING' : p.armed ? 'ARMED' : 'PLANNING';
-    this.node.state.className = p.burnActive ? 'hot' : p.armed ? 'on' : '';
-    this.node.total.textContent = fmtSpeed(p.totalDv);
-    this.node.tig.textContent = fmtPeriod(Math.max(0, p.timeToNode(sim)));
-    this.node.burn.textContent = `${p.estimateBurnTime(sim.ship).toFixed(0)} s`;
-    this.node.align.textContent = `${p.alignmentErrorDeg(sim).toFixed(1)}°`;
-    const R = sim.primary.radius;
-    if (p.predicted) {
-      this.node.ap.textContent = isFinite(p.predicted.apoapsis)
-        ? fmtDistance(p.predicted.apoapsis - R)
-        : 'ESC';
-      this.node.pe.textContent = fmtDistance(p.predicted.periapsis - R);
-    } else {
-      this.node.ap.textContent = this.node.pe.textContent = '—';
+    if (p.kind === 'coast') {
+      const t = (d.nextEvent ?? sim.met) - sim.met;
+      return `<h3>${p.name}</h3>` + rows([['NEXT EVENT', `T−${clock(t)}`], ['WARP', 'G']]);
     }
-    this.node.pro.textContent = signed(p.prograde);
-    this.node.nrm.textContent = signed(p.normal);
-    this.node.rad.textContent = signed(p.radial);
+    const cue = d.cue;
+    switch (p.name) {
+      case 'DESCENT': {
+        const f = localFrame(sim.ship, sim.primary);
+        const burnSeconds = sim.ship.fuel / (sim.ship.stage.thrust / sim.ship.exhaustVelocity) / Math.max(0.3, sim.ship.throttle);
+        return (
+          `<h3>${cue?.label ?? p.name}</h3>` +
+          `<div class="row"><span class="k">ALTITUDE</span><b class="big">${range(f.h)}</b></div>` +
+          rows([
+            ['SINK RATE', speed(-f.vz, 1), -f.vz > 3 && f.h < 200 ? 'bad' : ''],
+            ['DRIFT', speed(f.vh, f.vh < 100 ? 1 : 0), f.vh > 3 && f.h < 200 ? 'plan' : ''],
+            ['DPS LEFT', `${Math.round(burnSeconds)} S`, burnSeconds < 60 ? 'bad' : ''],
+            d.ctx.memo.rod !== undefined && !d.auto
+              ? ['ROD SET', `${speed(-d.ctx.memo.rod, 1)} ↓`, 'plan']
+              : ['THROTTLE', d.auto ? 'COMPUTER' : 'AUTO THR', 'plan'],
+          ])
+        );
+      }
+      case 'ASCENT': {
+        const f = localFrame(sim.ship, sim.primary);
+        return (
+          `<h3>${cue?.label ?? p.name}</h3>` +
+          `<div class="row"><span class="k">TO ORBIT</span><b class="big plan">${speed(cue?.toGo ?? 0)}</b></div>` +
+          rows([
+            ['ALTITUDE', range(f.h)],
+            ['CLIMB', speed(f.vz, 1)],
+            ['ORBIT', forecast([{ primary: sim.primary, orbit: sim.orbit, t0: sim.met, t1: sim.met, end: null }])],
+          ])
+        );
+      }
+      case 'DOCKING': {
+        const rel = sim.relative();
+        if (!rel) return '';
+        const closing = -rel.rangeRate;
+        const limit = Math.min(6, Math.max(0.25, rel.range / 60));
+        const lateral = rel.vel.clone().addScaledVector(rel.pos.clone().normalize(), -rel.vel.dot(rel.pos) / rel.range).length();
+        return (
+          `<h3>PROX OPS — COLUMBIA</h3>` +
+          `<div class="row"><span class="k">RANGE</span><b class="big tgt">${range(rel.range)}</b></div>` +
+          rows([
+            ['CLOSING', speed(closing, 2), closing > limit * 1.5 ? 'bad' : closing < 0 ? 'plan' : 'good'],
+            ['SAFE RATE', `≤ ${speed(limit, 2)}`],
+            ['DRIFT', speed(lateral, 2), lateral > 0.5 ? 'plan' : ''],
+            ['RCS', `${Math.round((sim.ship.rcsFuel / sim.ship.spec.rcsFuelMass) * 100)}%`],
+          ])
+        );
+      }
+      case 'ENTRY': {
+        const bank = Math.abs(currentBank(sim));
+        return (
+          `<h3>${cue?.label ?? 'ENTRY'}</h3>` +
+          `<div class="row"><span class="k">LOAD</span><b class="big ${sim.gLoad > 8 ? 'bad' : ''}">${sim.gLoad.toFixed(1)} G</b></div>` +
+          rows([
+            ['PEAK', `${sim.peakG.toFixed(1)} G`],
+            ['BANK', `${Math.round((bank * 180) / Math.PI)}°`],
+            ['GUIDANCE', `${Math.round(((cue?.bank ?? 0) * 180) / Math.PI)}°`, 'plan'],
+            ['VELOCITY', speed(sim.ship.velocity.length())],
+          ])
+        );
+      }
+    }
+    return '';
   }
-
-  private renderMissions(missions: MissionLog): void {
-    const items = missions.all;
-    const key = items.map((m) => m.state).join();
-    if (key === this.lastMissionKey) return;
-    this.lastMissionKey = key;
-    this.missionList.replaceChildren(
-      ...items.map((m) => {
-        const li = document.createElement('li');
-        li.textContent = m.label;
-        li.className = m.state === 'pending' ? '' : m.state;
-        return li;
-      }),
-    );
-  }
-}
-
-function signed(v: number): string {
-  return `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(v))}`;
-}
-
-/** Seconds until the ship reaches the given true anomaly (0=Pe, π=Ap). */
-function timeToAnomaly(sim: Simulation, nuTarget: number): number {
-  const e = sim.elements;
-  if (!isFinite(e.period)) return Infinity;
-  const n = meanMotion(e);
-  const mNow = trueToMeanAnomaly(e.trueAnomaly, e.eccentricity);
-  const mTarget = trueToMeanAnomaly(nuTarget, e.eccentricity);
-  let dM = mTarget - mNow;
-  while (dM <= 0) dM += Math.PI * 2;
-  return dM / n;
 }

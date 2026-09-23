@@ -1,83 +1,92 @@
 import type { RotationInput, TranslationInput } from './sim/spacecraft';
 
-export interface InputHandlers {
-  onWarpUp(): void;
-  onWarpDown(): void;
-  onToggleSas(): void;
-  onReset(): void;
-  onToggleHelp(): void;
-  onMaxThrottle(): void;
-  onCutThrottle(): void;
-  onToggleNode(): void;
-  onExecuteNode(): void;
-  onNodeDv(delta: number): void;
-  onNodeTig(delta: number): void;
-  onToggleMap(): void;
-  onSwitchCraft(): void;
-  onAnyKey(): void;
-}
+/** Discrete commands (edge-triggered keys). */
+export type Command =
+  | 'warp-up' | 'warp-down' | 'warp-next'
+  | 'throttle-full' | 'throttle-cut'
+  | 'hold' | 'sas' | 'auto'
+  | 'map' | 'focus' | 'help'
+  | 'enter' | 'restart' | 'menu' | 'replan' | 'continue'
+  | 'up' | 'down';
 
+const COMMANDS: Record<string, Command> = {
+  Period: 'warp-up',
+  Comma: 'warp-down',
+  KeyG: 'warp-next',
+  KeyZ: 'throttle-full',
+  KeyX: 'throttle-cut',
+  KeyF: 'hold',
+  KeyT: 'sas',
+  KeyB: 'auto',
+  KeyM: 'map',
+  Tab: 'focus',
+  KeyH: 'help',
+  Enter: 'enter',
+  NumpadEnter: 'enter',
+  KeyR: 'restart',
+  KeyC: 'continue',
+  Escape: 'menu',
+  Backspace: 'replan',
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+};
+
+/**
+ * Keyboard: held keys become continuous stick/throttle/RCS inputs;
+ * presses queue discrete commands for the frame loop to consume.
+ */
 export class Input {
-  private readonly keys = new Set<string>();
+  private readonly held = new Set<string>();
+  private queue: Command[] = [];
+  onFirstKey: (() => void) | null = null;
 
-  constructor(handlers: InputHandlers) {
+  constructor() {
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
-      handlers.onAnyKey();
-      this.keys.add(e.code);
-      switch (e.code) {
-        case 'Period': handlers.onWarpUp(); break;
-        case 'Comma': handlers.onWarpDown(); break;
-        case 'KeyT': handlers.onToggleSas(); break;
-        case 'KeyR': handlers.onReset(); break;
-        case 'KeyH': handlers.onToggleHelp(); break;
-        case 'KeyZ': handlers.onMaxThrottle(); break;
-        case 'KeyX': handlers.onCutThrottle(); break;
-        case 'KeyN': handlers.onToggleNode(); break;
-        case 'KeyB': handlers.onExecuteNode(); break;
-        case 'KeyM': handlers.onToggleMap(); break;
-        case 'KeyV': handlers.onSwitchCraft(); break;
-        // [ ] adjust node ΔV; with Shift ({ }) they adjust node TIG.
-        case 'BracketLeft':
-          if (e.shiftKey) handlers.onNodeTig(-60); else handlers.onNodeDv(-10);
-          break;
-        case 'BracketRight':
-          if (e.shiftKey) handlers.onNodeTig(60); else handlers.onNodeDv(10);
-          break;
-        case 'Space': e.preventDefault(); break;
-      }
+      this.onFirstKey?.();
+      if (e.code === 'Tab' || e.code === 'Space' || e.code.startsWith('Arrow') || e.code === 'Backspace') e.preventDefault();
+      this.held.add(e.code);
+      const cmd = COMMANDS[e.code];
+      if (cmd && !e.repeat) this.queue.push(cmd);
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('keyup', (e) => this.held.delete(e.code));
+    window.addEventListener('blur', () => this.held.clear());
+  }
+
+  /** Commands pressed since the last call. */
+  drain(): Command[] {
+    const q = this.queue;
+    this.queue = [];
+    return q;
+  }
+
+  private axis(neg: string, pos: string): number {
+    return (this.held.has(pos) ? 1 : 0) - (this.held.has(neg) ? 1 : 0);
   }
 
   get rotation(): RotationInput {
-    const axis = (neg: string, pos: string) =>
-      (this.keys.has(pos) ? 1 : 0) - (this.keys.has(neg) ? 1 : 0);
-    return {
-      pitch: axis('KeyS', 'KeyW'),
-      yaw: axis('KeyD', 'KeyA'),
-      roll: axis('KeyE', 'KeyQ'),
-    };
+    return { pitch: this.axis('KeyS', 'KeyW'), yaw: this.axis('KeyD', 'KeyA'), roll: this.axis('KeyE', 'KeyQ') };
   }
 
   /** RCS translation, body frame: I/K fore-aft, J/L left-right, U/O up-down. */
   get translation(): TranslationInput {
-    const axis = (neg: string, pos: string) =>
-      (this.keys.has(pos) ? 1 : 0) - (this.keys.has(neg) ? 1 : 0);
-    return {
-      x: axis('KeyJ', 'KeyL'),
-      y: axis('KeyO', 'KeyU'),
-      z: axis('KeyK', 'KeyI'),
-    };
+    return { x: this.axis('KeyJ', 'KeyL'), y: this.axis('KeyO', 'KeyU'), z: this.axis('KeyK', 'KeyI') };
   }
 
-  get burn(): boolean {
-    return this.keys.has('Space');
+  get throttleRate(): number {
+    const up = this.held.has('ShiftLeft') || this.held.has('ShiftRight');
+    const down = this.held.has('ControlLeft') || this.held.has('ControlRight');
+    return (up ? 1 : 0) - (down ? 1 : 0);
   }
 
-  get throttleDelta(): number {
-    return (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 1 : 0) -
-      (this.keys.has('ControlLeft') || this.keys.has('ControlRight') ? 1 : 0);
+  /** Is the pilot touching the stick, RCS or throttle right now? */
+  get manual(): boolean {
+    const r = this.rotation;
+    const t = this.translation;
+    return r.pitch !== 0 || r.yaw !== 0 || r.roll !== 0 || t.x !== 0 || t.y !== 0 || t.z !== 0 || this.throttleRate !== 0;
+  }
+
+  get steering(): boolean {
+    const r = this.rotation;
+    return r.pitch !== 0 || r.yaw !== 0 || r.roll !== 0;
   }
 }
