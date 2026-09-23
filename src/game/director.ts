@@ -91,11 +91,17 @@ export class Director {
     return true;
   }
 
-  /** Commands for this frame, before the sim steps (AUTO only). dt = real s. */
-  preStep(dt: number): void {
-    if (this.status !== 'flying' || !this.auto) return;
+  /**
+   * Commands for this frame, before the sim steps: the phase's assist (every
+   * frame), then AUTO if engaged. dt = real s. Returns true if the phase
+   * owns the throttle this frame.
+   */
+  preStep(dt: number, throttleInput = 0): boolean {
+    if (this.status !== 'flying') return false;
     const p = this.phase;
     const sim = this.sim;
+    const owns = !this.auto && p?.kind === 'pilot' && !!p.assist?.(this.ctx, dt, throttleInput);
+    if (!this.auto) return owns;
     if (p?.kind === 'burn' && this.guide) {
       // Never light the engine mid-warp: the step would be far too long.
       const step = sim.warp > MAX_POWERED_WARP ? 0 : dt * sim.warp;
@@ -105,6 +111,7 @@ export class Director {
     } else if (p?.kind === 'pilot') {
       p.autopilot(this.ctx, dt);
     }
+    return true;
   }
 
   /** Bookkeeping after the sim stepped: burns, phase changes, verdicts. */

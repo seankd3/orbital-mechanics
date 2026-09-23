@@ -149,9 +149,11 @@ export class Hud {
           `<div class="row"><span class="k">ALTITUDE</span><b class="big">${range(f.h)}</b></div>` +
           rows([
             ['SINK RATE', speed(-f.vz, 1), -f.vz > 3 && f.h < 200 ? 'bad' : ''],
-            ['DRIFT', speed(f.vh, f.vh < 100 ? 1 : 0)],
+            ['DRIFT', speed(f.vh, f.vh < 100 ? 1 : 0), f.vh > 3 && f.h < 200 ? 'plan' : ''],
             ['DPS LEFT', `${Math.round(burnSeconds)} S`, burnSeconds < 60 ? 'bad' : ''],
-            ['GUIDANCE THR', `${Math.round((cue?.throttle ?? 0) * 100)}%`, 'plan'],
+            d.ctx.memo.rod !== undefined && !d.auto
+              ? ['ROD SET', `${speed(-d.ctx.memo.rod, 1)} ↓`, 'plan']
+              : ['THROTTLE', d.auto ? 'COMPUTER' : 'AUTO THR', 'plan'],
           ])
         );
       }

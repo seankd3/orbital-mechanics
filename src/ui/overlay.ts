@@ -88,7 +88,7 @@ const HELP: [string, string][] = [
   ['F', 'Hold attitude on the ◇ cue'],
   ['T', 'SAS rate damping'],
   ['Z / X', 'Throttle full / cut off'],
-  ['SHIFT / CTRL', 'Throttle up / down'],
+  ['SHIFT / CTRL', 'Throttle up / down · P66: sink rate'],
   ['I/K J/L U/O', 'RCS translate (docking)'],
   ['G', 'Warp to the next event'],
   [', / .', 'Time warp down / up'],

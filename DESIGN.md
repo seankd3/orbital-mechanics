@@ -24,7 +24,10 @@ Decided with Sean (2026-09-23):
 3. **Fly.** Align with the navball cue (by hand, or `F` to hold it). Press `G`
    to warp to the ignition countdown, light the engine (`Z`), and cut off
    (`X`) when Δv-to-go reaches zero. Powered descent, ascent, docking and
-   entry are flown by hand against a moving guidance cue.
+   entry are flown by hand against a moving guidance cue. You get the
+   automation Apollo's crew had: in P63/P64 the computer throttles and you
+   fly the attitude. In P66 you own it: null the drift with the stick, and
+   click the rate of descent with Shift/Ctrl while the computer holds it.
 4. **Debrief.** Stars and the numbers behind them. The flight carries straight
    into the next chapter. `R` restarts the chapter at any time, so a mistake
    costs you seconds, not the whole mission.
