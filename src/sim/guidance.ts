@@ -34,8 +34,9 @@ export function localFrame(ship: Spacecraft, body: Body) {
 /**
  * Two-point boundary guidance (E-guidance): the linear-acceleration profile
  * that reaches altitude hf at vertical speed vzf in tgo seconds, while
- * nulling horizontal speed to vhf. `tgo` is picked so the demand uses
- * `margin` of the engine.
+ * nulling horizontal speed to vhf — or, given `toSite` (the horizontal
+ * displacement to a landing site), arriving over it at rest. `tgo` is
+ * picked so the demand uses `margin` of the engine.
  */
 function boundaryGuidance(
   f: ReturnType<typeof localFrame>,
@@ -43,17 +44,27 @@ function boundaryGuidance(
   target: { h: number; vz: number; vh: number },
   aMax: number,
   margin: number,
+  toSite?: Vector3,
 ): { accel: Vector3; tgo: number } {
   const vhAlong = f.vhVec.dot(downrange);
   const cross = f.vhVec.clone().addScaledVector(downrange, -vhAlong);
   const demand = (T: number) => {
     const az = (6 * (target.h - f.h)) / (T * T) - (4 * f.vz + 2 * target.vz) / T + f.gEff;
-    return f.up
-      .clone()
-      .multiplyScalar(az)
-      .addScaledVector(downrange, (target.vh - vhAlong) / T)
-      .addScaledVector(cross, -1 / T);
+    const a = f.up.clone().multiplyScalar(az);
+    // Position and velocity both pinned: a = 6·Δx/T² − 4·v/T (arrive at rest).
+    if (toSite) return a.addScaledVector(toSite, 6 / (T * T)).addScaledVector(f.vhVec, -4 / T);
+    return a.addScaledVector(downrange, (target.vh - vhAlong) / T).addScaledVector(cross, -1 / T);
   };
+  // With the site pinned, demand is no longer monotone in T: take the
+  // constant-deceleration arrival (T = 2·range / speed, which is exactly the
+  // braking already under way for the natural site), stretched only as far
+  // as the engine margin needs.
+  const along = toSite?.dot(downrange) ?? 0;
+  if (toSite && along > 1 && vhAlong > 0.5) {
+    let T = (2 * along) / vhAlong;
+    for (let i = 0; i < 60 && demand(T).length() > margin * aMax; i++) T *= 1.05;
+    return { accel: demand(T), tgo: T };
+  }
   let lo = 1;
   let hi = 4000;
   for (let i = 0; i < 50; i++) {
@@ -68,20 +79,49 @@ function cue(accel: Vector3, aMax: number, phase: string, tgo: number): PoweredC
   return { dir: accel.clone().normalize(), throttle: Math.min(1, accel.length() / aMax), phase, tgo };
 }
 
-/** Lunar Module powered descent: braking (P63) to low gate, then P66 to contact. */
-export function descentGuidance(ship: Spacecraft, body: Body): PoweredCue {
+const LOW_GATE = { h: 120, vz: -3, vh: 0 };
+/** P64's nominal share of thrust: the rest is the pilot's to redesignate with. */
+const APPROACH_THROTTLE = 0.65;
+/** High gate: P63 hands over to P64, and the landing site becomes a target. */
+export const HIGH_GATE = 2_000; // m
+
+/**
+ * Lunar Module powered descent: braking (P63) to high gate, the approach
+ * (P64) to low gate over the landing site, then P66 to contact. `site` is
+ * the surface point P64 steers for (primary-relative, now); without one,
+ * P64 just brakes to a hover wherever that ends.
+ */
+export function descentGuidance(ship: Spacecraft, body: Body, site?: Vector3): PoweredCue {
   const f = localFrame(ship, body);
   const aMax = ship.stage.thrust / ship.mass;
   const downrange = f.vh > 0.5 ? f.vhVec.clone().normalize() : new Vector3().crossVectors(f.up, Y).normalize();
-  if (f.h > 250) {
-    const g = boundaryGuidance(f, downrange, { h: 120, vz: -3, vh: 0 }, aMax, 0.8);
-    if (g.tgo > 8) return cue(g.accel, aMax, f.h > 2_000 ? 'P63 BRAKING' : 'P64 APPROACH', g.tgo);
+  // Flying to a site, P64 runs all the way to low gate; otherwise P66 takes
+  // over a little above it, where the free braking solution gets twitchy.
+  // Low gate is one-way: once this returns P66, stop passing the site.
+  const approach = f.h <= HIGH_GATE;
+  const toSite = approach && site ? site.clone().sub(ship.position).projectOnPlane(f.up) : undefined;
+  if (f.h > (toSite ? LOW_GATE.h - 20 : 250)) {
+    const g = boundaryGuidance(f, downrange, LOW_GATE, aMax, 0.8, toSite);
+    if (g.tgo > (toSite ? 2 : 8)) return cue(g.accel, aMax, approach ? 'P64 APPROACH' : 'P63 BRAKING', g.tgo);
   }
   // P66: rate-of-descent control, horizontal nulling, nearly upright.
   // Drifting fast? Slow the descent (hover-ish) until the drift is killed.
   const drift = Math.min(1, 3 / Math.max(f.vh, 1e-6));
   const vzCmd = -Math.min(3, Math.max(0.7, f.h / 25)) * Math.max(0.15, drift);
   return p66(f, aMax, vzCmd);
+}
+
+/**
+ * The computer's landing site at high gate: where a gentler approach than
+ * P63's braking ends (constant deceleration to rest covers half the speed
+ * times tgo). Flying it at ~65% leaves thrust in hand to redesignate short
+ * as well as long. Primary-relative surface point, now.
+ */
+export function naturalSite(ship: Spacecraft, body: Body): Vector3 {
+  const f = localFrame(ship, body);
+  const downrange = f.vh > 0.5 ? f.vhVec.clone().normalize() : new Vector3().crossVectors(f.up, Y).normalize();
+  const g = boundaryGuidance(f, downrange, LOW_GATE, ship.stage.thrust / ship.mass, APPROACH_THROTTLE);
+  return ship.position.clone().addScaledVector(f.vhVec, g.tgo / 2).setLength(body.radius);
 }
 
 /** P66 attitude + throttle for a commanded sink rate (vz, m/s, negative down). */

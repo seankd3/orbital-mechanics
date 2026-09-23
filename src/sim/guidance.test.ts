@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EARTH, MOON } from '../constants';
 import { EARTH_BODY, MOON_BODY } from './bodies';
 import { lookQuaternion, pointQuaternion } from './executor';
-import { ascentGuidance, currentBank, descentGuidance, dockingGuidance, entryBank } from './guidance';
+import { ascentGuidance, currentBank, descentGuidance, dockingGuidance, entryBank, HIGH_GATE, localFrame, naturalSite } from './guidance';
 import { Orbit } from './orbit';
 import { Simulation } from './simulation';
 
@@ -51,7 +51,49 @@ describe('powered descent guidance', () => {
     expect(c.verticalSpeed).toBeLessThan(1.5);
     expect(c.horizontalSpeed).toBeLessThan(1);
     expect(c.tilt).toBeLessThan(10);
-    expect(sim.ship.fuelFraction).toBeGreaterThan(0.05);
+    // Better than Eagle's ~45 s of hover left: the DPS load is Apollo-tight on purpose.
+    const ship = sim.ship;
+    const hover = (ship.fuel * ship.exhaustVelocity) / ((MOON.mu / ship.position.lengthSq()) * ship.mass);
+    expect(hover).toBeGreaterThan(45);
+  });
+});
+
+describe('landing-site targeting (P64)', () => {
+  /** Fly the descent, designating at high gate a site offset (m) along and across track from the natural one. */
+  function landAt(along: number, across: number): number {
+    const sim = lmAtPdi();
+    const Y = new Vector3(0, 1, 0);
+    let site: Vector3 | null = null; // body-fixed
+    let lowGate = false; // P66 latched: the site is no longer flown to
+    for (let i = 0; i < 60 * 30 * 20 && !sim.ship.landed && !sim.outcome; i++) {
+      const f = localFrame(sim.ship, sim.primary);
+      if (!site && f.h <= HIGH_GATE) {
+        const dr = f.vhVec.clone().normalize();
+        const cr = new Vector3().crossVectors(f.up, dr);
+        const at = naturalSite(sim.ship, sim.primary).addScaledVector(dr, along).addScaledVector(cr, across);
+        site = at.setLength(MOON.radius).applyAxisAngle(Y, -MOON_BODY.spinAt(sim.met));
+      }
+      const now = lowGate ? undefined : site?.clone().applyAxisAngle(Y, MOON_BODY.spinAt(sim.met));
+      const cue = descentGuidance(sim.ship, sim.primary, now);
+      lowGate ||= !!site && cue.phase === 'P66 LAND';
+      sim.hold = pointQuaternion(sim.ship, cue.dir);
+      sim.ship.throttle = cue.throttle;
+      sim.step(DT);
+    }
+    expect(sim.outcome).toBeNull();
+    expect(sim.ship.landed).toBe(true);
+    expect(sim.lastContact!.verticalSpeed).toBeLessThan(1.5);
+    return sim.ship.landedSite!.angleTo(site!) * MOON.radius;
+  }
+
+  it('lands where the computer was already heading', () => {
+    expect(landAt(0, 0)).toBeLessThan(30);
+  });
+
+  it('flies a redesignated site: long, short and across track', () => {
+    expect(landAt(500, 0)).toBeLessThan(30);
+    expect(landAt(-300, 0)).toBeLessThan(30);
+    expect(landAt(150, 250)).toBeLessThan(30);
   });
 });
 

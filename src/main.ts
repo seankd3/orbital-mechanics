@@ -1,15 +1,17 @@
-import { Clock } from 'three';
+import { Clock, Vector3 } from 'three';
 import './style.css';
-import { WARP_LEVELS } from './constants';
+import { MOON, RENDER_SCALE, WARP_LEVELS } from './constants';
 import { Campaign } from './game/campaign';
 import { CHAPTERS } from './game/chapters';
 import { Director } from './game/director';
 import { launchSnapshot, NominalFlight } from './game/nominal';
 import { Input, type Command } from './input';
 import { CameraRig } from './render/camera';
+import { pickSphere } from './render/pick';
 import { Stage } from './render/stage';
 import { World, type Paths } from './render/world';
 import { engineOf, predictBurn, predictCoast, predictRemaining, stateOf } from './sim/burn';
+import { MOON_BODY } from './sim/bodies';
 import { Simulation, type Snapshot } from './sim/simulation';
 import { Audio } from './ui/audio';
 import { Hud } from './ui/hud';
@@ -22,6 +24,7 @@ import { currentBank } from './sim/guidance';
 type Mode = 'menu' | 'flying' | 'debrief' | 'abort' | 'finale';
 
 const HORIZON = 12 * 86_400;
+const Y_AXIS = new Vector3(0, 1, 0);
 const THROTTLE_RATE = 0.6; // full sweep in ~1.7 s
 
 const stage = new Stage(document.getElementById('app')!);
@@ -50,6 +53,20 @@ const mapView = new MapView(
 );
 
 input.onFirstKey = () => audio.init();
+
+// Click the ground (chase view) to put the landing point designator there;
+// a drag still orbits the camera.
+let press: { x: number; y: number } | null = null;
+stage.canvas.addEventListener('pointerdown', (e) => (press = { x: e.clientX, y: e.clientY }));
+stage.canvas.addEventListener('pointerup', (e) => {
+  const click = press && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 5;
+  press = null;
+  if (!click || mode !== 'flying' || rig.mode !== 'chase' || !director?.cue?.site) return;
+  const hit = pickSphere(stage.chase, e.clientX, e.clientY, world.moon.position, MOON.radius * RENDER_SCALE);
+  if (!hit) return;
+  const said = director.designate({ at: hit.applyAxisAngle(Y_AXIS, -MOON_BODY.spinAt(sim.met)).normalize() });
+  if (said) notify(said, said.includes('BOULDERS') ? 'warn' : 'info');
+});
 hud.onTransmission = () => audio.quindar();
 renderHelp();
 
@@ -177,6 +194,16 @@ function command(cmd: Command): void {
     case 'replan':
       notify(director.replan() ? 'BURN RESTORED TO THE COMPUTER SOLUTION' : 'NO UNLIT BURN TO RESTORE');
       break;
+    case 'up':
+    case 'down':
+    case 'left':
+    case 'right': {
+      // Landing point designator: ↑/↓ long/short, ←/→ across track.
+      const clicks: [number, number] = cmd === 'up' ? [1, 0] : cmd === 'down' ? [-1, 0] : cmd === 'left' ? [0, -1] : [0, 1];
+      const said = director.designate({ clicks });
+      if (said) notify(said, said.includes('BOULDERS') ? 'warn' : 'info');
+      break;
+    }
     case 'warp-next': {
       const t = director.nextEvent;
       if (t !== null && t > sim.met + 1) sim.warpUntil = t;
@@ -267,14 +294,15 @@ function update(dt: number): void {
 function render(dt: number): void {
   const map = rig.mode === 'map';
   const time = clock.elapsedTime;
-  world.sync(sim, paths, map, time, (2 * stage.mapHalfHeight) / window.innerHeight);
+  const d = mode === 'flying' ? director : null;
+  const cue = d?.cue;
+  const lpd = cue?.site ? { site: cue.site, hazard: !!cue.hazard } : null;
+  world.sync(sim, paths, map, time, (2 * stage.mapHalfHeight) / window.innerHeight, lpd);
   if (map) rig.updateMap(sim, [paths.current, paths.plan], dt);
   else rig.updateChase(sim, world.craftPosition(sim, sim.activeId));
   mapView.update(paths);
 
-  const d = mode === 'flying' ? director : null;
   hud.update(sim, d, { map, hold: holdCue, plan: paths.plan });
-  const cue = d?.cue;
   const rel = sim.relative();
   const inEntry = d?.phase?.name === 'ENTRY' && sim.chutes === 'none';
   navball.update({
@@ -287,7 +315,7 @@ function render(dt: number): void {
   });
   const ship = sim.ship;
   const lowFuel = mode === 'flying' && ship.firing && ship.fuelFraction < 0.06;
-  audio.update(ship.firing, ship.throttle, Math.min(1, ship.stage.thrust / 1e6), lowFuel);
+  audio.update(ship.firing, ship.throttle, Math.min(1, ship.stage.thrust / 1e6), lowFuel || !!cue?.alarm);
   if (mode === 'flying' && sim.translation && (sim.translation.x || sim.translation.y || sim.translation.z)) audio.rcs();
   stage.render();
 }

@@ -1,5 +1,27 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [4.1.0] - 2026-09-23 — The landing, as it happened
+
+### Added
+- **Program alarms.** 1202, 1202, then 1201 on the way down. The computer
+  restarts (cue and auto-throttle hold for 1.5 s), the master alarm sounds,
+  and Houston comes back with "we're GO on that alarm".
+- **The boulder field.** At high gate the computer commits to a site, and
+  it's a crater ringed with boulders, like West crater. A boulder under a
+  footpad or a crater wall tips the LM over.
+- **Landing point designator.** In P64 the site shows as an amber reticle
+  (red on hazardous ground). ↑↓←→ move it 2° of look angle per click, or
+  click the ground to put it there. AUTO takes it long past the field.
+- **Fuel calls.** "60 SECONDS", "30 SECONDS", then bingo, counted to a
+  20 s land-or-abort reserve. The debrief compares your hover time at
+  contact with Eagle's ~45 s.
+
+### Changed
+- P64 now flies to a site: E-guidance with the position pinned, and a
+  constant-deceleration time-to-go. Low gate is one-way into P66.
+- The DPS load is 7,800 kg (was 9,400), so a clean landing is Apollo-tight.
+- The descent chapter moved to `game/chapters/descent.ts`.
+
 ## [4.0.0] - 2026-09-23 — Apollo 11, rewritten
 
 A from-scratch rewrite around a campaign with a pull: nine graded
