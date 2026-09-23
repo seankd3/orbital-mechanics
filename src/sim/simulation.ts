@@ -399,7 +399,7 @@ export class Simulation {
     if (speed > LAND_MAX_SPEED || tilt > LAND_MAX_TILT) {
       this.outcome = {
         kind: 'lost',
-        reason: tilt > LAND_MAX_TILT ? `TIPPED OVER — ${Math.round(tilt)}° TILT` : `IMPACT AT ${speed.toFixed(1)} M/S`,
+        reason: speed > LAND_MAX_SPEED ? `IMPACT AT ${speed.toFixed(1)} M/S` : `TIPPED OVER — ${Math.round(tilt)}° TILT`,
       };
       ship.position.setLength(body.radius);
       ship.velocity.copy(surfaceVel);
