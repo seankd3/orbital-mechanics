@@ -5,16 +5,17 @@ import type { Simulation } from '../../sim/simulation';
 import { BoulderField } from '../../sim/terrain';
 import { clock, km, range, speed } from '../../ui/format';
 import type { Chapter, Ctx, Designation } from '../chapter';
+import { say, type Voice } from '../voice';
 import { holdCue, line } from './common';
 
 const R = MOON.radius;
 const Y = new Vector3(0, 1, 0);
 
-/** Apollo 11's executive overflows, by altitude on this descent: 1202, 1202, 1201. */
-const ALARMS: [number, number][] = [
-  [10_000, 1202],
-  [7_000, 1202],
-  [900, 1201],
+/** Apollo 11's executive overflows, by altitude on this descent: 1202, 1202, 1201 (and what the loop said). */
+const ALARMS: [number, number, Voice][] = [
+  [10_000, 1202, 'alarm-1202'],
+  [7_000, 1202, 'alarm-1202-again'],
+  [900, 1201, 'alarm-1201'],
 ];
 /** Seconds the computer is busy restarting: the cue and auto-throttle hold still. */
 const RESTART = 1.5;
@@ -22,8 +23,9 @@ const RESTART = 1.5;
 const ALARM_TALK = 8;
 /** At bingo there are this many seconds of hover left: land or abort. */
 export const BINGO_RESERVE = 20;
-/** The fuel calls, in seconds to bingo. */
+/** The fuel calls, in seconds to bingo, and Duke's voice for them. */
 const FUEL_CALLS = [60, 30, 0];
+const FUEL_VOICE: (Voice | null)[] = ['sixty-seconds', 'thirty-seconds', null];
 /** Eagle had 45–50 s of propellant left at contact (post-flight analysis). */
 const EAGLE_HOVER = 45;
 /** One LPD click moves the site 2° of look angle. */
@@ -55,6 +57,7 @@ export const DESCENT: Chapter = {
       enter: (ctx) => {
         ctx.memo.pdiFuel = ctx.sim.ship.fuel;
         ctx.sim.emit('PDI — THROTTLE UP (Z)', 'warn');
+        say(ctx.sim, 'go-for-pdi');
       },
       cue: (ctx) => {
         const c = command(ctx);
@@ -101,7 +104,8 @@ export const DESCENT: Chapter = {
       const { e, n } = field.local(sim.ship.landedSite);
       ctx.memo.long = Math.hypot(e, n);
     }
-    sim.emit('HOUSTON, TRANQUILITY BASE HERE. THE EAGLE HAS LANDED.', 'good');
+    say(sim, 'contact-light');
+    say(sim, 'eagle-has-landed');
   },
   grade(ctx) {
     const { vs, hs, hover, long } = ctx.memo;
@@ -192,6 +196,7 @@ function descentTick(ctx: Ctx): void {
     [m.frozenX, m.frozenY, m.frozenZ, m.frozenThrottle] = [c.dir.x, c.dir.y, c.dir.z, c.throttle];
     m.freezeUntil = sim.met + RESTART;
     sim.emit(`PROGRAM ALARM ${alarm[1]}`, 'bad');
+    say(sim, alarm[2]);
   }
 
   // Fuel calls, counted down to bingo.
@@ -199,7 +204,9 @@ function descentTick(ctx: Ctx): void {
   if (call !== undefined && ship.firing && hoverSeconds(sim) - BINGO_RESERVE <= call) {
     m.calls = (m.calls ?? 0) + 1;
     m.callAt = sim.met;
-    sim.emit(call ? `${call} SECONDS` : 'BINGO — LAND IT OR LOSE IT', call ? 'warn' : 'bad');
+    const voice = FUEL_VOICE[m.calls - 1];
+    if (voice) say(sim, voice, 'warn'); // Duke's call is the call
+    else sim.emit('BINGO — LAND IT OR LOSE IT', 'bad');
   }
 }
 

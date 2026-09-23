@@ -152,6 +152,7 @@ function command(cmd: Command): void {
       if (chapter === CHAPTERS.length - 1) {
         setMode('finale');
         showFinale(campaign);
+        audio.voice('big-board'); // JFK's goal on the Mission Control big board: accomplished
       } else startChapter(chapter + 1, sim.snapshot());
     }
     if (cmd === 'restart' && director) startChapter(chapter, director.start);
