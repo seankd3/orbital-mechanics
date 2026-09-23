@@ -135,8 +135,13 @@ export class Simulation {
 
   /** Invalidate cached conics after an outside change to craft state. */
   perturbed(): void {
-    this.rails = null;
+    this.reshaped();
     this.otherRails = null;
+  }
+
+  /** Only the active craft's path changed; the partner keeps its conic. */
+  private reshaped(): void {
+    this.rails = null;
     this.orbitCache = null;
   }
 
@@ -298,7 +303,9 @@ export class Simulation {
       this.lmAlive = false;
       this.emit('LM LEFT BEHIND', 'warn');
     }
-    this.perturbed();
+    this.reshaped();
+    this.otherRails = null;
+    this.anchorOther(); // the partner's new conic starts at the crossing, not the step's start
     this.emit(kind === 'soi-enter' ? 'ENTERING LUNAR SPHERE OF INFLUENCE' : 'LEAVING LUNAR SPHERE OF INFLUENCE');
   }
 
@@ -384,7 +391,7 @@ export class Simulation {
     ship.throttle = 0;
     this.warp = 1;
     this.warpUntil = null;
-    this.perturbed();
+    this.reshaped();
 
     if (body === EARTH_BODY) {
       const safe = this.chutes === 'mains' && vertical < 15;
