@@ -267,7 +267,7 @@ function update(dt: number): void {
 function render(dt: number): void {
   const map = rig.mode === 'map';
   const time = clock.elapsedTime;
-  world.sync(sim, paths, map, time);
+  world.sync(sim, paths, map, time, (2 * stage.mapHalfHeight) / window.innerHeight);
   if (map) rig.updateMap(sim, [paths.current, paths.plan], dt);
   else rig.updateChase(sim, world.craftPosition(sim, sim.activeId));
   mapView.update(paths);

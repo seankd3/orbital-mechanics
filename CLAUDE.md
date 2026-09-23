@@ -49,6 +49,11 @@ stay primary-relative.
 - `src/render/` holds `stage`, `camera` (horizon-frame chase; auto-framed
   map), `world` (per-frame placement), `trajectory`, `surface` (the
   low-altitude patch), `ship`, `planet`, `moon`, `starfield` and `labels`.
+  - `lines` is the only way to draw a line: analytically anti-aliased
+    screen-space strokes (widths in CSS px, combined by MAX), plus
+    `LineBuffer` for lines rewritten every frame without reallocating.
+  - `depth` makes the log depth buffer work in meters, so edges resolve
+    against the faces behind them at craft range.
 - `src/ui/` holds `hud`, `navball`, `mapview` (labels and node drag),
   `overlay` (menu, debrief, abort), `audio` and `format`.
 - `public/data/` holds `star_catalog.json` (HYG) and `ne_50m_coastline.json`.
@@ -69,8 +74,8 @@ through it and saves screenshots.
 
 ## Style
 
-Restrained clean vectors, like a mission-control display: one-pixel lines on
-near-black, and color only where it means something (green nominal track,
+Restrained clean vectors, like a mission-control display: thin, smooth
+anti-aliased strokes (1–1.5 px) on near-black, and color only where it means something (green nominal track,
 amber plan and cue, cyan target, red warning). No bloom, scanlines or CRT
 shader. The HUD is monospace, uppercase, with tabular numerals. Keep modules
 small and single-purpose.

@@ -1,8 +1,10 @@
-import { BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineLoop, LineSegments, Quaternion, Vector3, type Scene } from 'three';
+import { Group, Quaternion, Vector3, type Scene } from 'three';
+import type { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { EARTH, MOON, RENDER_SCALE } from '../constants';
 import { EARTH_BODY, MOON_BODY } from '../sim/bodies';
 import type { Arc } from '../sim/coast';
 import type { Simulation } from '../sim/simulation';
+import { isVectorLine, LineBuffer, lineMaterial, polyline } from './lines';
 import { createEarth } from './planet';
 import { createMoon } from './moon';
 import { DIM, EARTH_LINE, FAINT, MOON_LINE, PLAN, TARGET, TRACK } from './palette';
@@ -34,9 +36,10 @@ export class World {
   readonly partner = new Track(TARGET, { opacity: 0.55 });
   private readonly moonPatch = new SurfacePatch(MOON.radius, MOON_LINE, true);
   private readonly earthPatch = new SurfacePatch(EARTH.radius, EARTH_LINE, false);
-  private readonly soi: LineLoop;
+  private readonly soi: LineSegments2;
   /** Altitude drop-line and ground reticle under a low craft. */
-  private readonly drop: LineSegments;
+  private readonly drop = new LineBuffer(lineMaterial({ color: DIM, width: 1.25 }), 17);
+  private readonly dropPoints = new Float32Array(17 * 6);
   private padSite: Vector3 | null = null;
 
   constructor(scene: Scene) {
@@ -47,15 +50,11 @@ export class World {
       const a = (i / 180) * Math.PI * 2;
       ring.push(new Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(MOON.soiRadius * RENDER_SCALE));
     }
-    this.soi = new LineLoop(new BufferGeometry().setFromPoints(ring), new LineBasicMaterial({ color: FAINT }));
-    const dropGeo = new BufferGeometry();
-    dropGeo.setAttribute('position', new BufferAttribute(new Float32Array(2 * 3 * 34), 3));
-    this.drop = new LineSegments(dropGeo, new LineBasicMaterial({ color: DIM }));
-    this.drop.frustumCulled = false;
+    this.soi = polyline(ring, lineMaterial({ color: FAINT, width: 1.25 }), true);
     for (const craft of [this.csm, this.lm]) craft.group.scale.setScalar(RENDER_SCALE);
     this.pad.scale.setScalar(RENDER_SCALE);
     scene.add(
-      this.earth, this.moon, this.soi, this.drop, this.csm.group, this.lm.group, this.pad,
+      this.earth, this.moon, this.soi, this.drop.object, this.csm.group, this.lm.group, this.pad,
       this.track.group, this.plan.group, this.partner.group, createStarfield(),
     );
   }
@@ -65,7 +64,8 @@ export class World {
     return sim.absolutePosition(sim[which]).multiplyScalar(RENDER_SCALE);
   }
 
-  sync(sim: Simulation, paths: Paths, map: boolean, time: number): void {
+  /** `unitsPerPx`: map scale, render units per CSS pixel (sizes the plan's dashes). */
+  sync(sim: Simulation, paths: Paths, map: boolean, time: number, unitsPerPx: number): void {
     const met = sim.met;
     const moonPos = MOON_BODY.positionAt(met).multiplyScalar(RENDER_SCALE);
     this.moon.position.copy(moonPos);
@@ -123,7 +123,7 @@ export class World {
     }
     // The global line layers float kilometers off at this range: the patch takes over.
     for (const [body, near] of [[this.earth, low && patch === this.earthPatch], [this.moon, low && patch === this.moonPatch]] as const) {
-      for (const child of body.children) if (child instanceof LineSegments) child.visible = !near;
+      for (const child of body.children) if (isVectorLine(child)) child.visible = !near;
     }
     this.syncDropLine(sim, low && sim.altitude < 4_000 && !sim.ship.landed);
 
@@ -131,22 +131,21 @@ export class World {
     for (const t of [this.track, this.plan, this.partner]) t.visible = map;
     if (map) {
       this.track.update(paths.current?.slice(0, 2) ?? null, met, sim.primary);
-      this.plan.update(paths.plan?.slice(0, 2) ?? null, met, sim.primary);
+      this.plan.update(paths.plan?.slice(0, 2) ?? null, met, sim.primary, unitsPerPx);
       this.partner.update(paths.partner, met, sim.primary);
     }
   }
 
   /** A plumb line from the craft to the ground with a footprint ring. */
   private syncDropLine(sim: Simulation, on: boolean): void {
-    this.drop.visible = on;
+    this.drop.object.visible = on;
     if (!on) return;
     const up = sim.ship.position.clone().normalize();
     const h = sim.altitude;
-    this.drop.position.copy(this.craftPosition(sim, sim.activeId));
-    const attr = this.drop.geometry.getAttribute('position') as BufferAttribute;
+    this.drop.object.position.copy(this.craftPosition(sim, sim.activeId));
+    const out = this.dropPoints;
     const ground = up.clone().multiplyScalar(-h);
-    attr.setXYZ(0, 0, 0, 0);
-    attr.setXYZ(1, ground.x * RENDER_SCALE, ground.y * RENDER_SCALE, ground.z * RENDER_SCALE);
+    out.set([0, 0, 0, ground.x * RENDER_SCALE, ground.y * RENDER_SCALE, ground.z * RENDER_SCALE]);
     const a = new Vector3(1, 0, 0).cross(up).normalize();
     const b = new Vector3().crossVectors(up, a);
     const r = 4 + h * 0.02;
@@ -155,9 +154,8 @@ export class World {
       const t1 = ((i + 1) / 16) * Math.PI * 2;
       const p0 = ground.clone().addScaledVector(a, r * Math.cos(t0)).addScaledVector(b, r * Math.sin(t0)).multiplyScalar(RENDER_SCALE);
       const p1 = ground.clone().addScaledVector(a, r * Math.cos(t1)).addScaledVector(b, r * Math.sin(t1)).multiplyScalar(RENDER_SCALE);
-      attr.setXYZ(2 + i * 2, p0.x, p0.y, p0.z);
-      attr.setXYZ(3 + i * 2, p1.x, p1.y, p1.z);
+      out.set([p0.x, p0.y, p0.z, p1.x, p1.y, p1.z], 6 + i * 6);
     }
-    attr.needsUpdate = true;
+    this.drop.setSegments(out);
   }
 }

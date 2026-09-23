@@ -1,27 +1,18 @@
-import {
-  AdditiveBlending,
-  BoxGeometry,
-  BufferGeometry,
-  Color,
-  ConeGeometry,
-  CylinderGeometry,
-  EdgesGeometry,
-  Group,
-  LineBasicMaterial,
-  LineSegments,
-  Mesh,
-  MeshBasicMaterial,
-  Vector3,
-} from 'three';
+import { AdditiveBlending, BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial, Vector3 } from 'three';
+import { edges, lineMaterial, pairs, type VectorLineMaterial } from './lines';
 import { DIM, INK, PLAN, VOID } from './palette';
 
 const FACE = new MeshBasicMaterial({ color: VOID, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 
-function edged(geometry: BufferGeometry, material: LineBasicMaterial): Group {
+function edged(geometry: BufferGeometry, material: VectorLineMaterial): Group {
   const g = new Group();
-  g.add(new Mesh(geometry, FACE), new LineSegments(new EdgesGeometry(geometry, 12), material));
+  g.add(new Mesh(geometry, FACE), edges(geometry, material));
   return g;
 }
+
+/** Craft strokes: bright structure, dimmer secondary parts. */
+const inkStroke = () => lineMaterial({ color: INK, width: 1.5 });
+const dimStroke = () => lineMaterial({ color: DIM, width: 1.25 });
 
 function along(geometry: BufferGeometry, z: number): BufferGeometry {
   geometry.rotateX(Math.PI / 2);
@@ -57,8 +48,8 @@ export interface CraftView {
  * module cone, service module, SPS bell, and the S-IVB with its J-2 behind.
  */
 export function createCsm(): CraftView {
-  const edge = new LineBasicMaterial({ color: INK.clone() });
-  const dim = new LineBasicMaterial({ color: DIM });
+  const edge = inkStroke();
+  const dim = dimStroke();
   const group = new Group();
 
   const cm = edged(along(new ConeGeometry(1.95, 3.2, 16), 3.55), edge);
@@ -127,7 +118,7 @@ function chuteSet(count: number, radius: number, height: number, spread: number)
     }
   }
   const g = new Group();
-  g.add(new LineSegments(new BufferGeometry().setFromPoints(pts), new LineBasicMaterial({ color: INK, transparent: true, opacity: 0.8 })));
+  g.add(pairs(pts, lineMaterial({ color: INK, width: 1.25, opacity: 0.8 })));
   g.visible = false;
   return g;
 }
@@ -137,8 +128,8 @@ function chuteSet(count: number, radius: number, height: number, spread: number)
  * with its docking tunnel over the octagonal descent stage and four legs.
  */
 export function createLm(): CraftView {
-  const edge = new LineBasicMaterial({ color: INK });
-  const dim = new LineBasicMaterial({ color: DIM });
+  const edge = inkStroke();
+  const dim = dimStroke();
   const group = new Group();
 
   const ascent = new Group();
@@ -181,7 +172,7 @@ export function createPad(): Group {
 }
 
 /** The descent stage: octagonal drum and four legs, +Z up, feet at z = −3. */
-function createDescentStage(edge = new LineBasicMaterial({ color: INK }), dim = new LineBasicMaterial({ color: DIM })): Group {
+function createDescentStage(edge = inkStroke(), dim = dimStroke()): Group {
   const g = new Group();
   const drum = edged(along(new CylinderGeometry(2.1, 2.1, 1.7, 8), -0.3), edge);
   g.add(drum);
@@ -196,6 +187,6 @@ function createDescentStage(edge = new LineBasicMaterial({ color: INK }), dim = 
     legs.push(hip, pad, knee, pad);
     legs.push(pad.clone().add(new Vector3(-s * 0.45, c * 0.45, 0)), pad.clone().add(new Vector3(s * 0.45, -c * 0.45, 0)));
   }
-  g.add(new LineSegments(new BufferGeometry().setFromPoints(legs), dim));
+  g.add(pairs(legs, dim));
   return g;
 }

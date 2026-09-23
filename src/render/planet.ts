@@ -1,15 +1,7 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Group,
-  LineBasicMaterial,
-  LineSegments,
-  Mesh,
-  MeshBasicMaterial,
-  SphereGeometry,
-  Vector3,
-} from 'three';
+import { Group, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from 'three';
+import type { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { EARTH, RENDER_SCALE } from '../constants';
+import { lineMaterial, segments, type VectorLineMaterial } from './lines';
 import { EARTH_LINE, FAINT, VOID } from './palette';
 
 const R = EARTH.radius * RENDER_SCALE;
@@ -21,13 +13,13 @@ export function createEarth(): Group {
   const group = new Group();
   group.add(new Mesh(new SphereGeometry(R * 0.998, 96, 64), new MeshBasicMaterial({ color: VOID })));
   // Rings sit between the parallels, so none lies in the (equatorial) orbit plane.
-  group.add(graticule(R, 15, new LineBasicMaterial({ color: FAINT }), 7.5));
+  group.add(graticule(R, 15, lineMaterial({ color: FAINT, width: 1 }), 7.5));
   loadCoastlines(group);
   return group;
 }
 
 /** Latitude rings and meridians every `step` degrees, as one segment buffer. */
-export function graticule(radius: number, step: number, material: LineBasicMaterial, offset = 0): LineSegments {
+export function graticule(radius: number, step: number, material: VectorLineMaterial, offset = 0): LineSegments2 {
   const pts: number[] = [];
   const push = (v: Vector3) => pts.push(v.x, v.y, v.z);
   const n = 128;
@@ -43,9 +35,7 @@ export function graticule(radius: number, step: number, material: LineBasicMater
       push(sph(radius, -90 + ((i + 1) / (n / 2)) * 180, lon));
     }
   }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-  return new LineSegments(g, material);
+  return segments(pts, material);
 }
 
 /** Point on a sphere: +Y north, longitude 0 on +X, east toward −Z. */
@@ -72,9 +62,7 @@ function loadCoastlines(group: Group): void {
           }
         }
       }
-      const g = new BufferGeometry();
-      g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-      group.add(new LineSegments(g, new LineBasicMaterial({ color: EARTH_LINE })));
+      group.add(segments(pts, lineMaterial({ color: EARTH_LINE, width: 1.25 })));
     })
     .catch(() => {
       /* a graticule-only Earth still reads */

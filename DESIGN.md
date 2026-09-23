@@ -11,7 +11,7 @@ Decided with Sean (2026-09-23):
 | Structure | **Apollo campaign.** One continuous flight in nine short chapters. Each chapter can be restarted and is graded 0–3 ★. |
 | Procedure depth | **Flight-director cues.** CAPCOM tells you the next step in plain words. The guidance computer solves each burn as an editable node, and you align and fire. No checklists or DSKY. |
 | Hands | **Keyboard flies, mouse plans.** WASD/QE, throttle and warp are on the keyboard. In the map you drag the node along the orbit, and the camera works with the mouse. |
-| Look | **Restrained clean vectors.** Crisp one-pixel lines on black and a mission-control palette. No bloom, scanlines or CRT shader. |
+| Look | **Restrained clean vectors.** Thin, smooth anti-aliased strokes on black and a mission-control palette. No bloom, scanlines or CRT shader. |
 
 ## Core loop (one chapter)
 
