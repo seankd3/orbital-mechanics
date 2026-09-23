@@ -32,14 +32,18 @@ chapters, from TLI to splashdown, with flight-director cues. See `DESIGN.md`.
   - An auto-framed top-down map with patched-conic paths and forecasts.
   - A surface patch for low flight (grids, craters, drop-line) and an
     ocean grid for splashdown.
-- **Tests (44).**
+- **No dead ends.** Every chapter ends: a missed ignition, a coast that
+  misses the Moon or Earth, or a flyby past LOI fails with the reason, and
+  `R` retries in seconds. Manual warp stops on the next event.
+- **Tests (51).**
   - Orbit and physics.
   - Coast determinism across warp.
   - Targeting flown against its own prediction (TLI perilune within 2 cm
     after a 3-day coast).
   - Guidance.
   - The whole mission on AUTO.
-  - Hand-flown paths (TLI and landing for three stars) and failure paths.
+  - Hand-flown paths (TLI and landing for three stars), failure paths, and
+    the partner craft holding its conic when the active one lands.
 
 ### Changed
 - One patched-conic propagator is used for flight, drawing and targeting.
