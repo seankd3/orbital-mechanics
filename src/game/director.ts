@@ -7,6 +7,9 @@ import type { Chapter, Ctx, Cue, Grade, Phase } from './chapter';
 
 export type Status = 'flying' | 'complete' | 'failed';
 
+/** An unlit burn this long past ignition is missed (s). */
+export const IGNITION_GRACE = 120;
+
 /**
  * Runs one chapter: walks its phases, owns the current burn solution,
  * flies it when the pilot hands over (B), and grades the result.
@@ -17,6 +20,8 @@ export class Director {
   /** Current computer solution (burn phases). */
   maneuver: Maneuver | null = null;
   guide: BurnGuide | null = null;
+  /** The computer's own solution for this burn and its ignition (Backspace restores it). */
+  private solution: { maneuver: Maneuver; ignition: number } | null = null;
   /** The computer has the stick. */
   auto = false;
   status: Status = 'flying';
@@ -81,10 +86,14 @@ export class Director {
     if (this.guide?.phase === 'paused') this.guide.accept();
   }
 
-  /** Re-solve the current burn around a new ignition center (map drag), or restore the default. */
+  /** Re-solve the current burn around a new ignition center (map drag), or restore the computer's. */
   replan(tig?: number): boolean {
     const p = this.phase;
     if (p?.kind !== 'burn' || !this.guide || this.guide.litAt !== null) return false;
+    if (tig === undefined && this.solution && this.solution.ignition > this.sim.met) {
+      this.arm(this.solution.maneuver);
+      return true;
+    }
     const m = p.solve(this.ctx, tig);
     if (!m) return false;
     this.arm(m);
@@ -100,6 +109,9 @@ export class Director {
     if (this.status !== 'flying') return false;
     const p = this.phase;
     const sim = this.sim;
+    // Warp can't carry the flight past the next event: stop on it, as G does.
+    const next = this.nextEvent;
+    if (sim.warpUntil === null && next !== null && next > sim.met && sim.met + sim.warp * dt > next) sim.warpUntil = next;
     const owns = !this.auto && p?.kind === 'pilot' && !!p.assist?.(this.ctx, dt, throttleInput);
     if (!this.auto) return owns;
     if (p?.kind === 'burn' && this.guide) {
@@ -129,7 +141,7 @@ export class Director {
       }
     }
 
-    const reason = sim.outcome?.kind === 'lost' ? sim.outcome.reason : this.chapter.failed?.(this.ctx) ?? null;
+    const reason = sim.outcome?.kind === 'lost' ? sim.outcome.reason : this.missedIgnition() ?? this.chapter.failed?.(this.ctx) ?? null;
     if (reason) {
       this.status = 'failed';
       this.failure = reason;
@@ -148,10 +160,18 @@ export class Director {
     this.enter(this.phaseIndex + 1);
   }
 
+  private missedIgnition(): string | null {
+    const p = this.phase;
+    const g = this.guide;
+    if (p?.kind !== 'burn' || !g || g.litAt !== null || this.sim.met < g.ignition + IGNITION_GRACE) return null;
+    return `MISSED THE ${p.name} BURN — NO IGNITION`;
+  }
+
   private enter(i: number): void {
     this.phaseIndex = i;
     this.maneuver = null;
     this.guide = this.ctx.guide = null;
+    this.solution = null;
     const p = this.phase;
     if (!p) {
       this.chapter.finish?.(this.ctx);
@@ -176,6 +196,7 @@ export class Director {
       return;
     }
     this.arm(m);
+    this.solution = { maneuver: m, ignition: this.guide!.ignition };
   }
 
   private arm(m: Maneuver): void {

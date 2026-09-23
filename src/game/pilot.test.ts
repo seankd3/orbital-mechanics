@@ -112,6 +112,39 @@ describe('recovering downstream', () => {
   });
 });
 
+describe('the controls around a burn', () => {
+  it('restores the same TLI window late in the countdown (Backspace)', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('tli')], sim, nominal.start(index('tli')));
+    const tig = d.maneuver!.tig;
+    sim.warpUntil = d.guide!.ignition - 240;
+    sim.warp = 1e9;
+    fly(d, 1);
+    expect(d.replan()).toBe(true);
+    expect(d.maneuver!.tig).toBeCloseTo(tig, 0);
+  });
+
+  it('stops manual warp on the ignition countdown instead of flying past it', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('loi')], sim, nominal.start(index('loi')));
+    sim.warp = 1e5;
+    for (let i = 0; i < 600 && sim.warp > 1; i++) fly(d, 1);
+    expect(d.status).toBe('flying');
+    expect(sim.met).toBeCloseTo(d.guide!.ignition - 30, 3);
+    expect(sim.warp).toBe(1);
+  });
+
+  it('lifts off early on the ascent engine and ends the wait (costing the timing star)', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('ascent')], sim, nominal.start(index('ascent')));
+    expect(sim.ship.stage.name).toBe('APS');
+    fly(d, 30 * 20, () => (sim.ship.throttle = 1)); // Z, hours before the window
+    expect(sim.ship.landed).toBe(false);
+    expect(d.phase?.name).toBe('ASCENT');
+    expect(d.ctx.memo.window - d.ctx.memo.liftoff).toBeGreaterThan(600);
+  });
+});
+
 describe('ways to fail', () => {
   it('impacts if the DPS is shut down at 3 km', () => {
     const sim = new Simulation();
@@ -157,6 +190,51 @@ describe('ways to fail', () => {
     fly(d, 60 * 30 * 20); // hands off: the CM stays lift-up
     expect(d.status).toBe('failed');
     expect(d.failure).toMatch(/SKIPPED OUT/);
+  });
+
+  it('fails MCC once the coast no longer meets the Moon', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('mcc')], sim, nominal.start(index('mcc')));
+    d.toggleAuto();
+    for (let i = 0; i < 50 && d.phase?.kind !== 'coast'; i++) {
+      if (!sim.ship.firing) warpNext(d);
+      fly(d, 3000);
+    }
+    expect(d.phase?.name).toBe('TRANSLUNAR COAST');
+    sim.ship.velocity.multiplyScalar(0.97); // a stray SPS firing
+    sim.perturbed();
+    fly(d, 1);
+    expect(d.status).toBe('failed');
+    expect(d.failure).toMatch(/NO LUNAR ENCOUNTER/);
+  });
+
+  it('calls a missed burn instead of waiting forever for LOI', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('loi')], sim, nominal.start(index('loi')));
+    const ignition = d.guide!.ignition;
+    warpNext(d);
+    fly(d, 30 * 60); // never light it
+    expect(d.capcom).toMatch(/LATE/);
+    fly(d, 30 * 200);
+    expect(d.status).toBe('failed');
+    expect(d.failure).toMatch(/MISSED THE LOI BURN/);
+    expect(sim.met - ignition).toBeLessThan(200);
+  });
+
+  it('fails entry once the return path misses the interface', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('entry')], sim, nominal.start(index('entry')));
+    for (let i = 0; i < 50 && d.phase?.kind !== 'coast'; i++) {
+      if (d.phase?.kind === 'burn' && !d.auto) d.toggleAuto();
+      if (!sim.ship.firing) warpNext(d);
+      fly(d, 3000);
+    }
+    expect(d.phase?.name).toBe('COAST TO ENTRY');
+    sim.ship.velocity.multiplyScalar(0.999);
+    sim.perturbed();
+    fly(d, 1);
+    expect(d.status).toBe('failed');
+    expect(d.failure).toMatch(/ENTRY INTERFACE/);
   });
 
   it('calls a collision when the LM rams Columbia', () => {

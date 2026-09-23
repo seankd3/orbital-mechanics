@@ -88,7 +88,7 @@ export class World {
     const lmVisible = sim.lmAlive && !(sim.docked && sim.csm.stagesDropped === 0); // inside the SLA until TLI
     this.lm.group.visible = lmVisible;
     if (lmVisible) {
-      this.lm.setStage(sim.lm.stagesDropped);
+      this.lm.setStage(sim.lm.landedSite ? 0 : sim.lm.stagesDropped); // on the surface it sits on its descent stage
       if (sim.docked) {
         this.lm.group.position.copy(csmPos).addScaledVector(sim.csm.forward, DOCKED_OFFSET * RENDER_SCALE);
         this.lm.group.quaternion.copy(sim.csm.quaternion).multiply(FLIP);
