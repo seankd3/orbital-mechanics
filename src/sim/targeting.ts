@@ -285,19 +285,22 @@ export function solveIntercept(
   return best && { tpi: best.tpi, arrival: best.arrival, brakingDv: best.brakingDv };
 }
 
-/** Velocity-match (braking) burn at the chaser's closest approach to the target. */
-export function solveBraking(chaser: FlightState, target: FlightState, within: number): Maneuver | null {
-  let bestT = chaser.t;
-  let bestD = Infinity;
+/**
+ * Braking: match the target's velocity `standoff` seconds before closest
+ * approach, which leaves the chaser a kilometer or two short for the RCS
+ * approach — never through the target.
+ */
+export function solveBraking(chaser: FlightState, target: FlightState, within: number, standoff = 120): Maneuver | null {
+  let tca = chaser.t;
+  let best = Infinity;
   for (let t = chaser.t; t < chaser.t + within; t += 5) {
     const d = coastTo(chaser, t).pos.distanceTo(coastTo(target, t).pos);
-    if (d < bestD) {
-      bestD = d;
-      bestT = t;
+    if (d < best) {
+      best = d;
+      tca = t;
     }
   }
-  const c = coastTo(chaser, bestT);
-  const dv = coastTo(target, bestT).vel.sub(c.vel);
-  return toManeuver(bestT, dv, c);
+  const tig = Math.max(chaser.t + 60, tca - standoff);
+  const c = coastTo(chaser, tig);
+  return toManeuver(tig, coastTo(target, tig).vel.sub(c.vel), c);
 }
-
