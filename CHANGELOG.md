@@ -1,5 +1,73 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [4.0.0] - 2026-09-23 — Apollo 11, rewritten
+
+A from-scratch rewrite around a campaign with a pull: nine graded
+chapters, from TLI to splashdown, with flight-director cues. See `DESIGN.md`.
+
+### Added
+- **The campaign.** Nine chapters, each restartable and graded 0–3 ★. The
+  flight carries through, and the menu starts any chapter you have reached
+  from the nominal flight.
+- **Flight-director cues.** A CAPCOM line with quindar tones. The computer
+  solves each burn as a node you can drag in the map to have it re-solved.
+  Also: a navball ◇ cue and throttle bug, F attitude hold, and G warp to
+  the next event. B hands a phase to the computer (caps the chapter at ★★).
+- **Real targeting.**
+  - TLI window search with a finite S-IVB burn (replaces the Hohmann to the
+    Moon's current radius).
+  - Midcourse to a 110 km perilune.
+  - LOI, a 2-D solve that circularizes despite a 7-minute burn.
+  - DOI, and TEI to the −6.5° entry corridor.
+  - Lambert TPI and braking.
+- **Piloting set pieces.**
+  - E-guidance powered descent (P63/P64/P66) to a graded touchdown, with
+    the crew's automation: auto-throttle through P63/P64, and in P66 a
+    rate-of-descent hold that Shift/Ctrl adjust.
+  - P12 ascent timed to the CSM.
+  - RCS prox ops and docking.
+  - Lifting entry with bank guidance, reefed drogues and three mains.
+- **Views.**
+  - A true-scale chase camera in the local horizon frame.
+  - An auto-framed top-down map with patched-conic paths and forecasts.
+  - A surface patch for low flight (grids, craters, drop-line) and an
+    ocean grid for splashdown.
+- **No dead ends.** Every chapter ends: a missed ignition, a coast that
+  misses the Moon or Earth, or a flyby past LOI fails with the reason, and
+  `R` retries in seconds. Manual warp stops on the next event.
+- **Tests (51).**
+  - Orbit and physics.
+  - Coast determinism across warp.
+  - Targeting flown against its own prediction (TLI perilune within 2 cm
+    after a 3-day coast).
+  - Guidance.
+  - The whole mission on AUTO.
+  - Hand-flown paths (TLI and landing for three stars), failure paths, and
+    the partner craft holding its conic when the active one lands.
+
+### Changed
+- One patched-conic propagator is used for flight, drawing and targeting.
+  Coasting always rides the exact conic, so time warp no longer changes
+  where you go.
+- The look is restrained clean vectors (Sean's call): no bloom, scanlines or
+  CRT shader.
+- Vehicles: the CSM gains a CM stage for entry; the LM RCS is 4-jet
+  (1,780 N).
+
+### Removed
+- Button panels (holds, burns, node ±, undock/dock/stage/swap, checkpoints),
+  the Earth training objectives, fixed LOI/TEI magnitudes, the 30° parking
+  orbit, and manual craft swap.
+- Checklists, DSKY, failures and telemetry replay are not ported (decided);
+  their specs are in `docs/archive/`.
+
+### Fixed (found by the new tests)
+- The Δv meter swallowed the first burn frame, a 0.15 m/s overburn on
+  every burn.
+- The partner craft's conic was anchored one frame late (kilometers of
+  drift under warp).
+- The SOI handoff depended on the warp rate.
+
 ## [3.1.0] - 2026-07-09 — Full Apollo stack
 
 ### Added
