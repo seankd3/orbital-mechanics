@@ -44,7 +44,7 @@ flies within tolerance, but can earn at most ★★.
 | 2 | Midcourse Correction | Trim the coast, or skip it if your TLI was clean | Perilune at SOI entry |
 | 3 | Lunar Orbit Insertion | Retro burn at perilune, behind the Moon | Orbit vs 110 km circular |
 | 4 | Undock & DOI | LM separates and lowers perilune to 15 km | Perilune vs 15 km |
-| 5 | Powered Descent | Follow the guidance cue down, land it | Touchdown class, fuel left |
+| 5 | Powered Descent | Ride out the 1202s, redesignate off the boulder field, land it before bingo | Touchdown class, fuel left |
 | 6 | Lunar Ascent | Launch in the window and fly the ascent cue to orbit | Insertion orbit, timing |
 | 7 | Rendezvous & Docking | TPI and braking burns, then RCS to contact | Contact speed, RCS used |
 | 8 | Trans-Earth Injection | Burn for home, targeting the entry corridor | Predicted flight-path angle |

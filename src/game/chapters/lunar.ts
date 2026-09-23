@@ -2,12 +2,12 @@ import { Vector3 } from 'three';
 import { MOON } from '../../constants';
 import { stateOf } from '../../sim/burn';
 import { pointQuaternion } from '../../sim/executor';
-import { ascentGuidance, descentGuidance, dockingGuidance, localFrame } from '../../sim/guidance';
+import { ascentGuidance, dockingGuidance } from '../../sim/guidance';
 import { Orbit } from '../../sim/orbit';
 import type { Simulation } from '../../sim/simulation';
 import { solveBraking, solveIntercept, solveOppositeApsis, TARGET } from '../../sim/targeting';
 import { clock, km, range, speed } from '../../ui/format';
-import { starsFor, type Chapter, type Ctx } from '../chapter';
+import { starsFor, type Chapter } from '../chapter';
 import { burnSay, engine, holdCue, line, now } from './common';
 
 const R = MOON.radius;
@@ -44,117 +44,6 @@ export const DOI: Chapter = {
     };
   },
 };
-
-// --- powered descent -------------------------------------------------------------
-
-export const DESCENT: Chapter = {
-  id: 'descent',
-  title: 'POWERED DESCENT',
-  summary: 'Fly the descent cue from 15 km to contact light.',
-  phases: [
-    {
-      kind: 'coast',
-      name: 'COAST TO PDI',
-      until: (ctx) => (ctx.memo.pdi ??= ctx.sim.orbit.nextPeriapsis(ctx.sim.met) ?? ctx.sim.met),
-      say: (ctx) => `EAGLE, YOU'RE GO FOR POWERED DESCENT. PDI AT PERILUNE IN ${clock((ctx.memo.pdi ?? 0) - ctx.sim.met)} — G WARPS THERE.`,
-    },
-    {
-      kind: 'pilot',
-      name: 'DESCENT',
-      enter: (ctx) => {
-        ctx.memo.pdiFuel = ctx.sim.ship.fuel;
-        ctx.sim.emit('PDI — THROTTLE UP (Z)', 'warn');
-      },
-      cue: (ctx) => {
-        const c = descentGuidance(ctx.sim.ship, ctx.sim.primary);
-        return { dir: c.dir, throttle: c.throttle, label: c.phase };
-      },
-      autopilot(ctx) {
-        const c = descentGuidance(ctx.sim.ship, ctx.sim.primary);
-        holdCue(ctx, c.dir, c.throttle);
-      },
-      assist: descentAssist,
-      done: (ctx) => ctx.sim.ship.landed,
-      next: (ctx) => (missedPdi(ctx) ? (ctx.sim.orbit.nextPeriapsis(ctx.sim.met) ?? ctx.sim.met) - 20 : null),
-      say: (ctx) => (missedPdi(ctx) ? 'EAGLE, YOU MISSED PDI. G TAKES YOU AROUND TO THE NEXT PERILUNE — LIGHT IT THERE.' : descentCall(ctx)),
-    },
-  ],
-  finish(ctx) {
-    const c = ctx.sim.lastContact!;
-    ctx.memo.vs = c.verticalSpeed;
-    ctx.memo.hs = c.horizontalSpeed;
-    ctx.memo.fuel = ctx.sim.ship.fuelFraction;
-    ctx.sim.emit('HOUSTON, TRANQUILITY BASE HERE. THE EAGLE HAS LANDED.', 'good');
-  },
-  grade(ctx) {
-    const { vs, hs, fuel } = ctx.memo;
-    const severity = Math.max(vs / 1.5, hs / 1.0); // ≤1 soft, ≤2 firm
-    const raw = severity <= 1 ? 3 : severity <= 2 ? 2 : 1;
-    return {
-      stars: ctx.usedAuto ? Math.min(2, raw) : raw,
-      lines: [
-        line('CONTACT', raw === 3 ? 'SOFT' : raw === 2 ? 'FIRM' : 'HARD', raw >= 2),
-        line('SINK RATE', speed(vs, 1), vs <= 1.5),
-        line('DRIFT', speed(hs, 1), hs <= 1),
-        line('DPS PROPELLANT', `${Math.round(fuel * 100)}%`, fuel > 0.05),
-      ],
-    };
-  },
-};
-
-/**
- * What Apollo's crew had when flying by hand: the computer throttles
- * through P63/P64 while you fly the attitude; in P66 Shift/Ctrl click the
- * rate of descent and the computer holds it. X shuts the DPS down; Z relights.
- */
-function descentAssist(ctx: Ctx, dt: number, input: number): boolean {
-  const ship = ctx.sim.ship;
-  if (ship.landed || ship.throttle === 0 || ship.fuel <= 0) return false;
-  const c = descentGuidance(ship, ctx.sim.primary);
-  if (c.phase !== 'P66 LAND') {
-    ship.throttle = Math.max(0.05, c.throttle);
-    delete ctx.memo.rod;
-    return true;
-  }
-  const f = localFrame(ship, ctx.sim.primary);
-  ctx.memo.rod ??= Math.max(-3, Math.min(-0.5, f.vz));
-  ctx.memo.rod = Math.max(-5, Math.min(1, ctx.memo.rod + input * ROD_RATE * dt));
-  const lift = Math.max(0.3, ship.forward.dot(f.up));
-  const az = 1.5 * (ctx.memo.rod - f.vz) + f.gEff;
-  ship.throttle = Math.max(0.05, Math.min(1, (az * ship.mass) / (ship.stage.thrust * lift)));
-  return true;
-}
-
-/** P66 rate-of-descent change per second of Shift/Ctrl, m/s. */
-const ROD_RATE = 1;
-
-/** DPS never lit this phase, and more than 90 s past perilune: this pass is gone. */
-function missedPdi(ctx: Ctx): boolean {
-  const sim = ctx.sim;
-  const o = sim.orbit;
-  if (sim.ship.fuel < ctx.memo.pdiFuel - 1 || !o.closed) return false;
-  const since = sim.met - ((o.nextPeriapsis(sim.met) ?? sim.met) - o.period);
-  return since > 90 && since < o.period - 60;
-}
-
-function descentCall(ctx: Ctx): string {
-  const sim = ctx.sim;
-  const ship = sim.ship;
-  const f = localFrame(ship, sim.primary);
-  const cue = descentGuidance(ship, sim.primary);
-  const seconds = ship.fuel / (ship.stage.thrust / ship.exhaustVelocity) / Math.max(ship.throttle, 0.3);
-  if (!ship.firing && f.h > 1_000) return 'LIGHT THE DPS — Z. THE COMPUTER THROTTLES; YOU FLY THE ◇ (F HOLDS IT).';
-  if (ship.fuelFraction < 0.05) return `${Math.round(seconds)} SECONDS. GET IT DOWN.`;
-  if (cue.phase === 'P66 LAND') {
-    const rod = ctx.memo.rod ?? f.vz;
-    if (f.vh > 3) return `P66 — YOU HAVE IT. DRIFT ${speed(f.vh, 1)}: NULL IT WITH THE STICK (OR F) BEFORE YOU SET DOWN.`;
-    return f.h > 30
-      ? `P66. ${Math.round(f.h)} M, SINK ${speed(-rod, 1)} — SHIFT SLOWS IT, CTRL SPEEDS IT. AIM FOR UNDER 1.5 M/S AT CONTACT.`
-      : `${Math.round(f.h)} M… DOWN ${speed(-f.vz, 1)}… PICKING UP SOME DUST.`;
-  }
-  if (cue.phase === 'P64 APPROACH') return `P64 PITCHOVER. ${km(f.h, 1)}. KEEP IT ON THE ◇ — P66 IS YOURS BELOW 250 M.`;
-  return `P63 BRAKING. ${km(f.h, 1)}, ${speed(f.vh)} ACROSS THE GROUND. AUTO THROTTLE; YOU'RE GO.`;
-}
 
 // --- ascent ---------------------------------------------------------------------
 
