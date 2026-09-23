@@ -5,6 +5,7 @@ import type { Arc } from '../../sim/coast';
 import type { Simulation } from '../../sim/simulation';
 import { clock, speed } from '../../ui/format';
 import type { Ctx, GradeLine } from '../chapter';
+import { IGNITION_GRACE } from '../director';
 
 export const DEG = Math.PI / 180;
 
@@ -45,9 +46,10 @@ export function burnSay(ctx: Ctx, intro: string): string {
     return g.duration > 60 ? 'GOOD BURN. PERIOD (.) WARPS IT UP TO 10×. X TO CUT OFF AT ZERO.' : 'GOOD BURN. WATCH ΔV TO GO — X TO CUT OFF AT ZERO.';
   }
   if (t > 120) return `${intro} IGNITION IN ${clock(t)} — G WARPS THERE.`;
+  if (t < -3) return `YOU'RE LATE — ${offCue > 3 ? 'ON THE ◇ AND ' : ''}LIGHT IT, Z. ${clock(IGNITION_GRACE + t)} UNTIL THE BURN IS MISSED.`;
   if (offCue > 3) return `IGNITION IN ${clock(t)}. GET ON THE ◇ CUE — WASD/QE, OR F TO HOLD IT.`;
   if (t > 5) return `ATTITUDE IS GOOD. IGNITION IN ${clock(t)} — Z TO LIGHT IT ON ZERO.`;
-  return t > -3 ? 'IGNITION — Z!' : `YOU'RE LATE — LIGHT IT NOW, Z.`;
+  return 'IGNITION — Z!';
 }
 
 /** AUTO for pilot phases: hold +Z on the cue and set the throttle. */

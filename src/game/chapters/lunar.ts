@@ -208,22 +208,21 @@ export const ASCENT: Chapter = {
   summary: 'Leave the descent stage behind and chase Columbia into orbit.',
   begin(ctx) {
     ctx.memo.window = liftoffWindow(ctx.sim);
+    ctx.sim.ship.dropStage();
+    ctx.sim.emit('ASCENT STAGE ARMED — DESCENT STAGE STAYS AS THE LAUNCH PAD', 'info');
   },
   phases: [
     {
       kind: 'coast',
       name: 'LIFTOFF WINDOW',
-      until: (ctx) => ctx.memo.window - 20,
+      // Lighting the APS early ends the wait (and costs the timing star).
+      until: (ctx) => (ctx.sim.ship.landed ? ctx.memo.window - 20 : ctx.sim.met),
       say: (ctx) =>
         `EVA COMPLETE. COLUMBIA IS COMING AROUND — YOUR LIFTOFF WINDOW IS IN ${clock(ctx.memo.window - ctx.sim.met)}. G TO WARP.`,
     },
     {
       kind: 'pilot',
       name: 'ASCENT',
-      enter: (ctx) => {
-        ctx.sim.ship.dropStage();
-        ctx.sim.emit('ASCENT STAGE ARMED — DESCENT STAGE STAYS AS THE LAUNCH PAD', 'info');
-      },
       cue: (ctx) => {
         const c = ascentGuidance(ctx.sim.ship, ctx.sim.primary, csmNormal(ctx.sim), INSERTION);
         return { dir: c.dir, throttle: c.toGo > 0 ? 1 : 0, toGo: c.toGo, label: c.phase };
@@ -286,7 +285,7 @@ export const RENDEZVOUS: Chapter = {
   title: 'RENDEZVOUS & DOCKING',
   summary: 'Intercept Columbia, brake, and fly the last hundred meters on RCS.',
   begin(ctx) {
-    ctx.memo.rcs0 = ctx.sim.lm.rcsFuel;
+    ctx.memo.rcs0 = Math.max(1e-9, ctx.sim.lm.rcsFuel);
   },
   phases: [
     {

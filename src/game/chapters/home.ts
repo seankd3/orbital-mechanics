@@ -1,11 +1,18 @@
 import { EARTH_BODY } from '../../sim/bodies';
 import { lookQuaternion } from '../../sim/executor';
 import { currentBank, entryBank } from '../../sim/guidance';
+import type { Arc } from '../../sim/coast';
 import type { Simulation } from '../../sim/simulation';
 import { earthArc, entryAngle, solveEntryCorridor, solveTei, TARGET } from '../../sim/targeting';
 import { clock, degrees, km, speed } from '../../ui/format';
 import { starsFor, type Chapter, type Ctx } from '../chapter';
 import { burnSay, coastPath, DEG, engine, line, now } from './common';
+
+/** The coast's leg that actually reaches entry interface, if any. */
+function entryLeg(sim: Simulation): Arc | null {
+  const arc = earthArc(coastPath(sim));
+  return arc?.end === 'atmosphere' ? arc : null;
+}
 
 /** Predicted flight-path angle at entry interface (rad), if the path comes home. */
 function predictedEntry(sim: Simulation): number | null {
@@ -67,16 +74,17 @@ export const ENTRY: Chapter = {
     {
       kind: 'coast',
       name: 'COAST TO ENTRY',
-      enter: (ctx) => void delete ctx.memo.ei,
+      enter: (ctx) => {
+        delete ctx.memo.ei;
+        ctx.memo.coasting = 1;
+      },
       until: (ctx) => {
-        if (ctx.memo.ei === undefined) {
-          const arc = earthArc(coastPath(ctx.sim));
-          ctx.memo.ei = arc ? arc.t1 : ctx.sim.met;
-        }
+        ctx.memo.ei ??= entryLeg(ctx.sim)?.t1 ?? ctx.sim.met;
         return ctx.memo.ei - 10 * 60;
       },
       arrive(ctx) {
         const sim = ctx.sim;
+        delete ctx.memo.coasting;
         sim.ship.dropStage(); // SPS → CM
         // Heat shield forward, lift up.
         sim.ship.quaternion.copy(lookQuaternion(sim.ship.velocity.clone().negate(), sim.ship.position));
@@ -103,6 +111,8 @@ export const ENTRY: Chapter = {
   failed: (ctx) => {
     const sim = ctx.sim;
     if (sim.peakG > PEAK_G_LIMIT) return `CREW LOST — ${sim.peakG.toFixed(0)} G`;
+    // Once MCC-7 is behind you, a path that never reaches the interface can't be fixed.
+    if (ctx.memo.coasting && !entryLeg(sim)) return 'MISSING THE ENTRY INTERFACE — COLUMBIA WILL NOT COME HOME';
     const climbing = sim.ship.velocity.dot(sim.ship.position) > 0;
     if (sim.peakG > 0.5 && climbing && sim.altitude > 130_000 && sim.primary === EARTH_BODY) {
       return 'SKIPPED OUT OF THE ATMOSPHERE — LIFT DOWN SOONER';
