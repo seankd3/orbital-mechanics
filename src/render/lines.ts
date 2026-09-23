@@ -1,6 +1,7 @@
 import {
   CustomBlending,
   EdgesGeometry,
+  InstancedBufferAttribute,
   InstancedInterleavedBuffer,
   InterleavedBufferAttribute,
   MaxEquation,
@@ -31,6 +32,12 @@ export interface Stroke {
   opacity?: number;
   /** Dash and gap lengths in render units. */
   dash?: [number, number];
+  /**
+   * Fade features as they shrink below a few pixels on screen (grids,
+   * craters): each segment carries a feature size, and the geometry lies
+   * on a sphere about its object's origin (for foreshortening).
+   */
+  fade?: boolean;
 }
 
 /** Device-pixel viewport, shared by every line material. */
@@ -49,56 +56,96 @@ const PAD = '2.0'; // quad padding, device px (one each side) for the coverage f
 // With meter log depth (depth.ts) a constant offset is a constant fraction of range:
 // 7e-6 ≈ 0.02 % (6 mm at 30 m), far above depth-buffer noise, far below any real gap.
 const DEPTH_BIAS = '7e-6';
+/** Feature fade: invisible below FADE_FROM px apart, full at FADE_TO px. */
+const FADE_FROM = '1.5';
+const FADE_TO = '5.0';
+
+/** Replace exactly one occurrence, loudly: three's shader source is not an API. */
+function patch(source: string, from: string, to: string): string {
+  if (!source.includes(from)) throw new Error(`lines: LineMaterial shader changed upstream (${from.slice(0, 40)}…)`);
+  return source.replace(from, to);
+}
+
+const VERTEX: [string, string][] = [
+  ['uniform vec2 resolution;', `uniform vec2 resolution;
+    #ifdef USE_FEATURE_FADE
+      attribute float instanceFeature;
+      varying float vFade;
+    #endif`],
+  ['vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );', `vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );
+    #ifdef USE_FEATURE_FADE
+    {
+      // Screen size of this segment's feature, foreshortened by the sphere it lies on.
+      bool atStart = position.y < 0.5;
+      vec3 p = atStart ? start.xyz : end.xyz;
+      vec3 n = normalize( ( modelViewMatrix * vec4( atStart ? instanceStart : instanceEnd, 0.0 ) ).xyz );
+      bool persp = projectionMatrix[ 2 ][ 3 ] == - 1.0;
+      vec3 view = persp ? normalize( p ) : vec3( 0.0, 0.0, - 1.0 );
+      float size = instanceFeature * abs( dot( view, n ) ) * projectionMatrix[ 1 ][ 1 ] * 0.5 * resolution.y;
+      vFade = smoothstep( ${FADE_FROM}, ${FADE_TO}, persp ? size / length( p ) : size );
+    }
+    #endif`],
+  ['offset *= linewidth;', `offset *= linewidth + ${PAD};`],
+];
+
+const FRAGMENT: [string, string][] = [
+  ['uniform float linewidth;', `uniform float linewidth;
+    #ifdef USE_FEATURE_FADE
+      varying float vFade;
+    #endif`],
+  // Dash ends get the coverage ramp below instead of a hard discard.
+  ['if ( mod( vLineDistance + dashOffset, dashSize + gapSize ) > dashSize ) discard; // todo - FIX', ''],
+  ['vec4 diffuseColor = vec4( diffuse, alpha );', `
+    // Exact coverage of a box-filtered stroke: distance to the centerline in device px.
+    float cap = max( abs( vUv.y ) - 1.0, 0.0 );
+    float r = length( vec2( vUv.x, cap ) ) * ( linewidth + ${PAD} ) * 0.5;
+    float coverage = clamp( 0.5 * linewidth + 0.5 - r, 0.0, 1.0 );
+    #ifdef USE_DASH
+      float u = mod( vLineDistance + dashOffset, dashSize + gapSize );
+      float px = max( fwidth( vLineDistance ), 1e-9 ); // line distance per device px
+      coverage *= clamp( u / px + 0.5, 0.0, 1.0 ) * clamp( ( dashSize - u ) / px + 0.5, 0.0, 1.0 );
+    #endif
+    #ifdef USE_FEATURE_FADE
+      coverage *= vFade;
+    #endif
+    vec4 diffuseColor = vec4( diffuse, alpha );`],
+  // An edge ties in depth with the faces that meet there (log depth bypasses
+  // polygonOffset): pull strokes a hair toward the eye.
+  ['#include <logdepthbuf_fragment>', `#include <logdepthbuf_fragment>
+    #ifdef USE_LOGDEPTHBUF
+      if ( vIsPerspective != 0.0 ) gl_FragDepth -= ${DEPTH_BIAS};
+    #endif`],
+  // Coverage is light: apply it in linear space (gamma-correct edges; MAX
+  // blending commutes with the sRGB curve, so this is exact). Opacity dims in
+  // display space, as the palette was tuned.
+  ['gl_FragColor = vec4( diffuseColor.rgb, alpha );', 'gl_FragColor = vec4( diffuseColor.rgb * coverage, coverage );'],
+  ['#include <premultiplied_alpha_fragment>', '#include <premultiplied_alpha_fragment>\n\tgl_FragColor.rgb *= opacity;'],
+];
 
 export class VectorLineMaterial extends LineMaterial {
   readonly cssWidth: number;
 
-  constructor({ color, width = 1.25, opacity = 1, dash }: Stroke) {
+  constructor({ color, width = 1.25, opacity = 1, dash, fade = false }: Stroke) {
     super({ color: color.getHex(), linewidth: width * pixelRatio, worldUnits: false, dashed: !!dash });
     this.cssWidth = width;
     this.opacity = opacity;
     if (dash) [this.dashSize, this.gapSize] = dash;
+    if (fade) this.defines.USE_FEATURE_FADE = '';
     this.uniforms.resolution.value = resolution; // shared: one resize updates all
     this.transparent = true;
     this.depthWrite = false;
     this.blending = CustomBlending;
     this.blendEquation = MaxEquation;
     this.onBeforeCompile = (shader) => {
-      shader.vertexShader = shader.vertexShader.replace('offset *= linewidth;', `offset *= linewidth + ${PAD};`);
-      shader.fragmentShader = shader.fragmentShader
-        // Dash ends get the same one-pixel coverage ramp instead of a hard discard.
-        .replace('if ( mod( vLineDistance + dashOffset, dashSize + gapSize ) > dashSize ) discard; // todo - FIX', '')
-        .replace(
-          'vec4 diffuseColor = vec4( diffuse, alpha );',
-          `{
-            // Exact coverage of a box-filtered stroke: distance to the centerline in device px.
-            float cap = max( abs( vUv.y ) - 1.0, 0.0 );
-            float r = length( vec2( vUv.x, cap ) ) * ( linewidth + ${PAD} ) * 0.5;
-            alpha *= clamp( 0.5 * linewidth + 0.5 - r, 0.0, 1.0 );
-            #ifdef USE_DASH
-              float u = mod( vLineDistance + dashOffset, dashSize + gapSize );
-              float px = max( fwidth( vLineDistance ), 1e-9 ); // line distance per device px
-              alpha *= clamp( u / px + 0.5, 0.0, 1.0 ) * clamp( ( dashSize - u ) / px + 0.5, 0.0, 1.0 );
-            #endif
-          }
-          vec4 diffuseColor = vec4( diffuse, alpha );`,
-        )
-        .replace(
-          // An edge ties in depth with the faces that meet there (log depth
-          // bypasses polygonOffset): pull strokes a hair toward the eye.
-          '#include <logdepthbuf_fragment>',
-          `#include <logdepthbuf_fragment>
-          #ifdef USE_LOGDEPTHBUF
-            if ( vIsPerspective != 0.0 ) gl_FragDepth -= ${DEPTH_BIAS};
-          #endif`,
-        )
-        .replace(
-          '#include <premultiplied_alpha_fragment>',
-          '#include <premultiplied_alpha_fragment>\n\tgl_FragColor = vec4( gl_FragColor.rgb * gl_FragColor.a, gl_FragColor.a );',
-        );
+      shader.vertexShader = VERTEX.reduce((src, [from, to]) => patch(src, from, to), shader.vertexShader);
+      shader.fragmentShader = FRAGMENT.reduce((src, [from, to]) => patch(src, from, to), shader.fragmentShader);
     };
     this.customProgramCacheKey = () => 'vector-line';
     materials.add(this);
+  }
+
+  get fades(): boolean {
+    return 'USE_FEATURE_FADE' in this.defines;
   }
 }
 
@@ -106,12 +153,24 @@ export function lineMaterial(stroke: Stroke): VectorLineMaterial {
   return new VectorLineMaterial(stroke);
 }
 
-/** Static segments from a flat [x0,y0,z0, x1,y1,z1, …] list. */
-export function segments(positions: ArrayLike<number>, material: VectorLineMaterial): LineSegments2 {
+/**
+ * Static segments from a flat [x0,y0,z0, x1,y1,z1, …] list. A fading
+ * material needs `features`: one size (render units) per segment.
+ */
+export function segments(positions: ArrayLike<number>, material: VectorLineMaterial, features?: ArrayLike<number>): LineSegments2 {
+  return new LineSegments2(segmentGeometry(positions, material, features), material);
+}
+
+/** The geometry behind `segments`, for swapping into an existing object. */
+export function segmentGeometry(positions: ArrayLike<number>, material: VectorLineMaterial, features?: ArrayLike<number>): LineSegmentsGeometry {
   const g = new LineSegmentsGeometry().setPositions(positions instanceof Float32Array ? positions : Float32Array.from(positions));
-  const line = new LineSegments2(g, material);
-  if (material.dashed) line.computeLineDistances();
-  return line;
+  if (material.fades) {
+    const n = Math.floor(positions.length / 6);
+    if (!features || features.length !== n) throw new Error('lines: a fading stroke needs one feature size per segment');
+    g.setAttribute('instanceFeature', new InstancedBufferAttribute(Float32Array.from(features), 1));
+  }
+  if (material.dashed) new LineSegments2(g, material).computeLineDistances();
+  return g;
 }
 
 /** Point pairs (a, b, c, d …) as segments ab, cd, … */

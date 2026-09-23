@@ -13,12 +13,12 @@ export function createEarth(): Group {
   const group = new Group();
   group.add(new Mesh(new SphereGeometry(R * 0.998, 96, 64), new MeshBasicMaterial({ color: VOID })));
   // Rings sit between the parallels, so none lies in the (equatorial) orbit plane.
-  group.add(graticule(R, 15, lineMaterial({ color: FAINT, width: 1 }), 7.5));
+  group.add(graticule(R, 15, lineMaterial({ color: FAINT, width: 1, fade: true }), 7.5));
   loadCoastlines(group);
   return group;
 }
 
-/** Latitude rings and meridians every `step` degrees, as one segment buffer. */
+/** Latitude rings and meridians every `step` degrees, as one segment buffer (the step is each segment's feature size). */
 export function graticule(radius: number, step: number, material: VectorLineMaterial, offset = 0): LineSegments2 {
   const pts: number[] = [];
   const push = (v: Vector3) => pts.push(v.x, v.y, v.z);
@@ -35,7 +35,8 @@ export function graticule(radius: number, step: number, material: VectorLineMate
       push(sph(radius, -90 + ((i + 1) / (n / 2)) * 180, lon));
     }
   }
-  return segments(pts, material);
+  const cell = radius * step * (Math.PI / 180);
+  return segments(pts, material, new Array(pts.length / 6).fill(cell));
 }
 
 /** Point on a sphere: +Y north, longitude 0 on +X, east toward −Z. */
