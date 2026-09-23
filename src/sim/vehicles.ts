@@ -44,7 +44,7 @@ export const VEHICLES = {
   lm: {
     label: 'LM',
     stages: [
-      { name: 'DPS', dryMass: 2_200, fuelMass: 9_400, thrust: 75_000, isp: 311 },
+      { name: 'DPS', dryMass: 2_200, fuelMass: 7_800, thrust: 75_000, isp: 311 },
       { name: 'APS', dryMass: 2_500, fuelMass: 3_000, thrust: 24_000, isp: 311 },
     ],
     rcsThrust: 1_780,

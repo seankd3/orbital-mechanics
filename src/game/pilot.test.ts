@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { localFrame } from '../sim/guidance';
 import { Simulation } from '../sim/simulation';
@@ -54,32 +55,103 @@ describe('a hand-flown chapter', () => {
   });
 });
 
+/**
+ * A human-ish pilot on the descent: Z at PDI, F on the cue, P66 sink-rate
+ * clicks with a reaction lag, and (if `lpd`) LPD clicks long, one every
+ * 0.3 s, while the designated site is on the boulders.
+ */
+function handLanding(d: Director, lpd: boolean): { clicks: number; frozen: number } {
+  const sim = d.sim;
+  warpNext(d);
+  const seen: number[] = [];
+  const lag = Math.round(0.4 / DT); // human reaction time
+  let clicks = 0;
+  let frozen = 0;
+  for (let i = 0; i < 60 * 30 * 20 && d.status === 'flying'; i++) {
+    let rodInput = 0;
+    if (d.phase?.name === 'DESCENT') {
+      if (!sim.ship.firing && !sim.ship.landed) sim.ship.throttle = 1; // Z at PDI
+      sim.hold = d.holdTarget(); // F
+      const cue = d.cue;
+      if (cue?.label === 'RESTART') frozen++;
+      if (lpd && cue?.hazard && i % 9 === 0) {
+        d.designate({ clicks: [1, 0] }); // ↑: long
+        clicks++;
+      }
+      const f = localFrame(sim.ship, sim.primary);
+      seen.push(-f.vz);
+      const sink = seen[Math.max(0, seen.length - 1 - lag)];
+      const want = Math.max(0.8, Math.min(3, f.h / 20)); // sink ≈ altitude / 20
+      if (d.ctx.memo.rod !== undefined) rodInput = sink > want + 0.3 ? 1 : sink < want - 0.3 ? -1 : 0;
+    }
+    d.preStep(DT, rodInput);
+    sim.step(DT);
+    d.postStep();
+    sim.events.length = 0;
+  }
+  return { clicks, frozen };
+}
+
 describe('a hand-flown landing', () => {
-  it('sets down softly with auto-throttle, F on the cue and P66 rate-of-descent clicks', () => {
+  it('rides out the alarms, redesignates past the boulders and sets down softly for three stars', () => {
     const sim = new Simulation();
     const d = new Director(CHAPTERS[index('descent')], sim, nominal.start(index('descent')));
-    warpNext(d);
-    const seen: number[] = [];
-    const lag = Math.round(0.4 / DT); // human reaction time
-    for (let i = 0; i < 60 * 30 * 20 && d.status === 'flying'; i++) {
-      let rodInput = 0;
-      if (d.phase?.name === 'DESCENT') {
-        if (!sim.ship.firing && !sim.ship.landed) sim.ship.throttle = 1; // Z at PDI
-        sim.hold = d.holdTarget(); // F
-        const f = localFrame(sim.ship, sim.primary);
-        seen.push(-f.vz);
-        const sink = seen[Math.max(0, seen.length - 1 - lag)];
-        const want = Math.max(0.8, Math.min(3, f.h / 20)); // sink ≈ altitude / 20
-        if (d.ctx.memo.rod !== undefined) rodInput = sink > want + 0.3 ? 1 : sink < want - 0.3 ? -1 : 0;
-      }
-      d.preStep(DT, rodInput);
-      sim.step(DT);
-      d.postStep();
-      sim.events.length = 0;
-    }
+    const { clicks, frozen } = handLanding(d, true);
+    expect(d.ctx.memo.alarms).toBe(3); // 1202, 1202, 1201
+    expect(frozen).toBeGreaterThan(0); // the restarts held the cue
+    expect(clicks).toBeGreaterThanOrEqual(1); // one 2° click at high gate is ~380 m: past the field
     expect(d.status).toBe('complete');
     expect(d.grade!.lines[0].value).toBe('SOFT');
     expect(d.grade!.stars).toBe(3);
+    expect(d.ctx.memo.long).toBeGreaterThan(sim.terrain!.extent);
+  });
+
+  it('lands where the pilot clicks the ground, and refuses a point behind', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('descent')], sim, nominal.start(index('descent')));
+    warpNext(d);
+    d.toggleAuto();
+    let picked: Vector3 | null = null;
+    for (let i = 0; i < 60 * 30 * 20 && d.status === 'flying'; i++) {
+      if (!picked && sim.terrain) {
+        const field = sim.terrain;
+        const here = field.local(sim.ship.position.clone().applyAxisAngle(new Vector3(0, 1, 0), -sim.primary.spinAt(sim.met)));
+        expect(d.designate({ at: field.point(here.e * 1.2, here.n * 1.2) })).toMatch(/BEHIND/);
+        picked = field.point(-here.e * 0.06 + 400, -here.n * 0.06); // a clear spot past the field
+        expect(d.designate({ at: picked })).toMatch(/CLEAR GROUND/);
+      }
+      fly(d, 1);
+    }
+    expect(d.status).toBe('complete');
+    expect(sim.ship.landedSite!.angleTo(picked!) * sim.primary.radius).toBeLessThan(40);
+  });
+
+  it('counts the fuel down to bingo while you hover', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('descent')], sim, nominal.start(index('descent')));
+    warpNext(d);
+    d.toggleAuto();
+    const calls: string[] = [];
+    for (let i = 0; i < 60 * 30 * 30 && d.status === 'flying'; i++) {
+      if (d.ctx.memo.lowGate && d.auto) d.toggleAuto(); // take it at low gate…
+      const hovering = !d.auto;
+      if (hovering) sim.hold = d.holdTarget();
+      d.preStep(DT, hovering ? 1 : 0); // …and hold Shift: climb, never land
+      sim.step(DT);
+      d.postStep();
+      for (const e of sim.events) if (/SECONDS|BINGO/.test(e.text)) calls.push(e.text);
+      sim.events.length = 0;
+    }
+    expect(calls).toEqual(['60 SECONDS', '30 SECONDS', 'BINGO — LAND IT OR LOSE IT']);
+    expect(d.status).toBe('failed'); // dry tanks at altitude
+  });
+
+  it('tips over flying the computer into the boulder field', () => {
+    const sim = new Simulation();
+    const d = new Director(CHAPTERS[index('descent')], sim, nominal.start(index('descent')));
+    handLanding(d, false);
+    expect(d.status).toBe('failed');
+    expect(d.failure).toMatch(/TIPPED OVER/);
   });
 });
 
@@ -245,6 +317,8 @@ describe('ways to fail', () => {
       if (!sim.ship.firing) warpNext(d);
       fly(d, 600);
     }
+    // Prox ops on AUTO to 150 m (braking leaves several km), then take it and ram.
+    for (let i = 0; i < 60 * 30 * 30 && d.status === 'flying' && sim.relative()!.range > 150; i++) fly(d, 1);
     d.toggleAuto();
     sim.hold = null;
     fly(d, 60 * 30 * 30, () => {
