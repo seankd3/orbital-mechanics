@@ -110,11 +110,11 @@ b { font-weight: 500; }
   font-size: 10px; letter-spacing: 0.12em; color: var(--dim);
   margin: -7px 0 0 8px;
 }
-.label.craft { color: var(--ink); margin-left: -5px; }
+.label.craft { color: var(--ink); margin-left: -6px; }
 .label.craft::before { content: '▲ '; }
 .label.partner { color: var(--target); margin: -22px 0 0 -5px; }
 .label.partner::before { content: '△ '; }
-.label.node { color: var(--plan); margin: 8px 0 0 -5px; }
+.label.node { color: var(--plan); margin: -7px 0 0 -6px; padding: 2px 4px 2px 0; }
 .label.node::before { content: '◇ '; }
 .label.node.drag { pointer-events: auto; cursor: grab; }
 .label.apsis::before { content: '· '; color: var(--track); }
@@ -129,7 +129,7 @@ b { font-weight: 500; }
   display: grid; grid-template-columns: 96px 1fr; gap: 3px 12px; font-size: 11px;
 }
 #help .k { color: var(--plan); }
-#help span:nth-child(even) { color: var(--dim); text-transform: none; letter-spacing: 0.02em; }
+#help .d { color: var(--dim); text-transform: none; letter-spacing: 0.02em; }
 #help h4 { grid-column: 1 / -1; margin: 6px 0 2px; font-size: 10px; font-weight: 500; letter-spacing: 0.3em; color: var(--dim); }
 
 /* --- overlay: menu, debrief, abort -------------------------------------- */

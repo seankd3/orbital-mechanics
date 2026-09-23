@@ -53,6 +53,35 @@ describe('a hand-flown chapter', () => {
   });
 });
 
+describe('recovering downstream', () => {
+  it('lets MCC-2 rescue a TLI cut short onto a lunar impact', () => {
+    const sim = new Simulation();
+    const tli = new Director(CHAPTERS[index('tli')], sim, nominal.start(index('tli')));
+    warpNext(tli);
+    fly(tli, 60 * 30 * 10, () => {
+      sim.hold = tli.holdTarget();
+      const g = tli.guide!;
+      if (!g.litAt && sim.met + DT >= g.ignition) sim.ship.throttle = 1;
+      if (g.litAt && g.remaining(sim.ship) < 1.5) sim.ship.throttle = 0; // 1.5 m/s short
+      if (g.phase === 'paused') tli.accept();
+    });
+    expect(tli.status).toBe('complete');
+    expect(tli.grade!.lines[0].value).toBe('LUNAR IMPACT');
+
+    const mcc = new Director(CHAPTERS[index('mcc')], sim, sim.snapshot());
+    fly(mcc, 5);
+    expect(mcc.status).toBe('flying'); // not doomed before the burn
+    expect(mcc.guide).not.toBeNull();
+    mcc.toggleAuto();
+    for (let i = 0; i < 50 && mcc.status === 'flying'; i++) {
+      if (!sim.ship.firing) warpNext(mcc);
+      fly(mcc, 3000);
+    }
+    expect(mcc.status).toBe('complete');
+    expect(mcc.grade!.stars).toBe(2);
+  });
+});
+
 describe('ways to fail', () => {
   it('impacts if the DPS is shut down at 3 km', () => {
     const sim = new Simulation();

@@ -37,18 +37,22 @@ export class MapView {
     private readonly chaseCamera: Camera,
   ) {
     this.labels = new Labels(parent);
-    canvas.addEventListener('pointerdown', (e) => {
+    // Grab the ◇ label itself, or the canvas right around the node.
+    const grab = (e: PointerEvent) => {
       if (!this.active() || !this.nodeScreen) return;
-      if (Math.hypot(e.clientX - this.nodeScreen.x, e.clientY - this.nodeScreen.y) < GRAB_PX) {
+      const onLabel = (e.target as HTMLElement).classList?.contains('node');
+      if (onLabel || Math.hypot(e.clientX - this.nodeScreen.x, e.clientY - this.nodeScreen.y) < GRAB_PX) {
         this.drag = true;
-        canvas.setPointerCapture(e.pointerId);
+        e.preventDefault();
       }
-    });
-    canvas.addEventListener('pointermove', (e) => {
+    };
+    canvas.addEventListener('pointerdown', grab);
+    parent.addEventListener('pointerdown', grab);
+    window.addEventListener('pointermove', (e) => {
       canvas.style.cursor = this.drag ? 'grabbing' : this.nearNode(e) ? 'grab' : '';
       if (this.drag) this.pendingTig = this.tigAt(e.clientX, e.clientY);
     });
-    canvas.addEventListener('pointerup', () => {
+    window.addEventListener('pointerup', () => {
       if (this.drag && this.pendingTig !== null) this.getDirector()?.replan(this.pendingTig);
       this.drag = false;
       this.pendingTig = null;
@@ -102,7 +106,7 @@ export class MapView {
       const tig = this.drag && this.pendingTig !== null ? this.pendingTig : d.maneuver.tig;
       const at = coastTo(stateOf(sim.ship, sim.primary, sim.met), tig);
       const world = at.primary.positionAt(at.primary === sim.primary ? sim.met : tig).add(at.pos).multiplyScalar(R);
-      const el = L.put('node', world, `${d.phase?.name ?? 'BURN'}`, 'node', cam);
+      const el = L.put('node', world, `${d.phase?.name ?? 'BURN'}`, 'node drag', cam);
       if (el) this.nodeScreen = Labels.screen(world, cam);
       if (this.drag && this.pendingTig !== null && performance.now() - this.lastReplan > REPLAN_MS) {
         this.lastReplan = performance.now();
