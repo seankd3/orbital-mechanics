@@ -9,7 +9,7 @@ export function km(meters: number, digits = 0): string {
 /** Distance that reads well from docking range to cislunar space. */
 export function range(meters: number): string {
   if (!isFinite(meters)) return '—';
-  if (Math.abs(meters) < 10_000) return `${Math.round(meters).toLocaleString('en-US')} M`;
+  if (Math.abs(meters) < 10_000) return `${(Math.round(meters) || 0).toLocaleString('en-US')} M`;
   return km(meters, Math.abs(meters) < 100_000 ? 1 : 0);
 }
 
