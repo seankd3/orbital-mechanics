@@ -11,6 +11,7 @@ import {
   type RotationInput,
   type TranslationInput,
 } from './spacecraft';
+import { BoulderField, type TerrainSpec } from './terrain';
 import { CM_AERO, type VehicleId } from './vehicles';
 
 export type Tone = 'info' | 'good' | 'warn' | 'bad';
@@ -62,6 +63,8 @@ export class Simulation {
   gLoad = 0;
   peakG = 0;
   lastContact: Contact | null = null;
+  /** Hazardous ground at the landing site (on the Moon), once the computer has picked one. */
+  terrain: BoulderField | null = null;
 
   /** Per-frame commands (set by the player or an autopilot). */
   rotation: RotationInput = NO_ROTATION;
@@ -412,7 +415,15 @@ export class Simulation {
       ship.velocity.copy(surfaceVel);
       return;
     }
-    ship.landedSite = up.applyAxisAngle(Y, -body.spinAt(this.met));
+    const site = up.applyAxisAngle(Y, -body.spinAt(this.met));
+    const hazard = body === MOON_BODY ? this.terrain?.hazardAt(site) : null;
+    if (hazard) {
+      this.outcome = { kind: 'lost', reason: hazard === 'crater' ? 'TIPPED OVER — ON THE CRATER WALL' : 'TIPPED OVER — A BOULDER UNDER A FOOTPAD' };
+      ship.position.setLength(body.radius);
+      ship.velocity.copy(surfaceVel);
+      return;
+    }
+    ship.landedSite = site;
     ship.pointAlong(ship.position);
     this.stepLanded(ship);
     this.emit('CONTACT LIGHT', 'good');
@@ -438,6 +449,7 @@ export class Simulation {
       docked: this.docked,
       lmAlive: this.lmAlive,
       chutes: this.chutes,
+      terrain: this.terrain?.spec ?? null,
       csm: craft(this.csm),
       lm: craft(this.lm),
     };
@@ -465,6 +477,7 @@ export class Simulation {
     this.docked = s.docked;
     this.lmAlive = s.lmAlive;
     this.chutes = s.chutes;
+    this.terrain = s.terrain ? BoulderField.fromSpec(s.terrain, MOON_BODY.radius) : null;
     craft(this.csm, s.csm);
     craft(this.lm, s.lm);
     this.outcome = null;
@@ -498,6 +511,7 @@ export interface Snapshot {
   docked: boolean;
   lmAlive: boolean;
   chutes: Chutes;
+  terrain?: TerrainSpec | null;
   csm: CraftSnapshot;
   lm: CraftSnapshot;
 }
