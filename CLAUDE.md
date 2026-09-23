@@ -50,8 +50,12 @@ stay primary-relative.
   map), `world` (per-frame placement), `trajectory`, `surface` (the
   low-altitude patch), `ship`, `planet`, `moon`, `starfield` and `labels`.
   - `lines` is the only way to draw a line: analytically anti-aliased
-    screen-space strokes (widths in CSS px, combined by MAX), plus
-    `LineBuffer` for lines rewritten every frame without reallocating.
+    screen-space strokes. Widths are in CSS px, coverage is applied in
+    linear light, and strokes combine by MAX. `LineBuffer` handles lines
+    rewritten every frame without reallocating. Dense repeating detail
+    (grids, craters, graticules) uses `fade: true` with a feature size
+    per segment, so it fades out before it can shimmer below a few pixels.
+    Stars are drawn the same way, as covered discs (`starfield`).
   - `depth` makes the log depth buffer work in meters, so edges resolve
     against the faces behind them at craft range.
 - `src/ui/` holds `hud`, `navball`, `mapview` (labels and node drag),

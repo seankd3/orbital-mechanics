@@ -34,5 +34,31 @@ function layer(stars: [number, number, number, number][], radius: number, size: 
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(pos, 3));
   g.setAttribute('color', new BufferAttribute(col, 3));
-  return new Points(g, new PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, blending: AdditiveBlending, depthWrite: false }));
+  return new Points(g, starMaterial(size));
+}
+
+/**
+ * Stars as round discs with exact pixel coverage (like the lines): the
+ * sprite is padded a pixel each side and the edge is shaded by distance
+ * from the center, in linear light. GL points would be hard squares.
+ */
+function starMaterial(size: number): PointsMaterial {
+  const m = new PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, blending: AdditiveBlending, depthWrite: false });
+  const edit = (src: string, from: string, to: string) => {
+    if (!src.includes(from)) throw new Error('starfield: points shader changed upstream');
+    return src.replace(from, to);
+  };
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = edit(shader.vertexShader, 'gl_PointSize = size;', 'gl_PointSize = size + 2.0;\n\tvDiameter = size;');
+    shader.vertexShader = edit(shader.vertexShader, 'uniform float scale;', 'uniform float scale;\nvarying float vDiameter;');
+    shader.fragmentShader = edit(shader.fragmentShader, 'uniform float opacity;', 'uniform float opacity;\nvarying float vDiameter;');
+    shader.fragmentShader = edit(
+      shader.fragmentShader,
+      'outgoingLight = diffuseColor.rgb;',
+      `float r = length( gl_PointCoord - 0.5 ) * ( vDiameter + 2.0 ); // device px from the center
+      outgoingLight = diffuseColor.rgb * clamp( 0.5 * vDiameter + 0.5 - r, 0.0, 1.0 );`,
+    );
+  };
+  m.customProgramCacheKey = () => 'star-disc';
+  return m;
 }
