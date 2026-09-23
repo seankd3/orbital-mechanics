@@ -60,6 +60,7 @@ export class Director {
     const p = this.phase;
     if (!p || this.status !== 'flying') return null;
     if (p.kind === 'coast') return p.until(this.ctx);
+    if (p.kind === 'pilot') return p.next?.(this.ctx) ?? null;
     if (p.kind === 'burn' && this.guide && this.guide.litAt === null) return this.guide.ignition - 30;
     return null;
   }

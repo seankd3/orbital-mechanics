@@ -61,7 +61,10 @@ export const DESCENT: Chapter = {
     {
       kind: 'pilot',
       name: 'DESCENT',
-      enter: (ctx) => ctx.sim.emit('PDI — THROTTLE UP (Z)', 'warn'),
+      enter: (ctx) => {
+        ctx.memo.pdiFuel = ctx.sim.ship.fuel;
+        ctx.sim.emit('PDI — THROTTLE UP (Z)', 'warn');
+      },
       cue: (ctx) => {
         const c = descentGuidance(ctx.sim.ship, ctx.sim.primary);
         return { dir: c.dir, throttle: c.throttle, label: c.phase };
@@ -71,7 +74,8 @@ export const DESCENT: Chapter = {
         holdCue(ctx, c.dir, c.throttle);
       },
       done: (ctx) => ctx.sim.ship.landed,
-      say: (ctx) => descentCall(ctx.sim),
+      next: (ctx) => (missedPdi(ctx) ? (ctx.sim.orbit.nextPeriapsis(ctx.sim.met) ?? ctx.sim.met) - 20 : null),
+      say: (ctx) => (missedPdi(ctx) ? 'EAGLE, YOU MISSED PDI. G TAKES YOU AROUND TO THE NEXT PERILUNE — LIGHT IT THERE.' : descentCall(ctx.sim)),
     },
   ],
   finish(ctx) {
@@ -96,6 +100,15 @@ export const DESCENT: Chapter = {
     };
   },
 };
+
+/** DPS never lit this phase, and more than 90 s past perilune: this pass is gone. */
+function missedPdi(ctx: Ctx): boolean {
+  const sim = ctx.sim;
+  const o = sim.orbit;
+  if (sim.ship.fuel < ctx.memo.pdiFuel - 1 || !o.closed) return false;
+  const since = sim.met - ((o.nextPeriapsis(sim.met) ?? sim.met) - o.period);
+  return since > 90 && since < o.period - 60;
+}
 
 function descentCall(sim: Simulation): string {
   const ship = sim.ship;

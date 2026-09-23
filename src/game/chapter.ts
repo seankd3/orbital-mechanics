@@ -54,6 +54,8 @@ export interface PilotPhase extends PhaseBase {
   cue(ctx: Ctx): Cue;
   autopilot(ctx: Ctx, dt: number): void;
   done(ctx: Ctx): boolean;
+  /** A moment G may warp to mid-phase (e.g. the next pass after a missed PDI). */
+  next?(ctx: Ctx): number | null;
 }
 
 /** Wait for a moment in the flight (G warps straight there). */
