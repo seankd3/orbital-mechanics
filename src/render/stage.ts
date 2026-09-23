@@ -1,9 +1,12 @@
 import { OrthographicCamera, PerspectiveCamera, Scene, WebGLRenderer, type Camera } from 'three';
+import { useMeterLogDepth } from './depth';
+import { setLineResolution } from './lines';
 import { VOID } from './palette';
 
 /**
  * Renderer and the two cameras: a true-scale perspective chase camera and
- * a top-down orthographic map camera. No post-processing — clean vectors.
+ * a top-down orthographic map camera. No post-processing: lines are
+ * anti-aliased analytically in their own shader (see lines.ts).
  */
 export class Stage {
   readonly scene = new Scene();
@@ -15,6 +18,7 @@ export class Stage {
   mapHalfHeight = 20;
 
   constructor(container: HTMLElement) {
+    useMeterLogDepth();
     this.renderer = new WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(VOID);
@@ -41,6 +45,7 @@ export class Stage {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
+    setLineResolution(w, h, this.renderer.getPixelRatio());
     this.chase.aspect = w / h;
     this.chase.updateProjectionMatrix();
     this.updateMap();

@@ -1,19 +1,12 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Group,
-  Line,
-  LineBasicMaterial,
-  LineDashedMaterial,
-  Vector3,
-  type Color,
-} from 'three';
+import { Group, Vector3, type Color } from 'three';
 import { RENDER_SCALE } from '../constants';
 import type { Body } from '../sim/bodies';
 import type { Arc } from '../sim/coast';
+import { LineBuffer, lineMaterial, type VectorLineMaterial } from './lines';
 
 const POINTS = 360;
 const MAX_ARCS = 4;
+const DASH: [number, number] = [9, 6]; // CSS px on screen
 
 /**
  * A patched-conic path: each arc drawn about its primary, placed where
@@ -22,19 +15,16 @@ const MAX_ARCS = 4;
  */
 export class Track {
   readonly group = new Group();
-  private readonly lines: Line[] = [];
+  private readonly lines: LineBuffer[] = [];
+  private readonly material: VectorLineMaterial;
+  private readonly points = new Float32Array(POINTS * 3);
 
   constructor(color: Color, opts: { dashed?: boolean; opacity?: number } = {}) {
+    this.material = lineMaterial({ color, width: 1.5, opacity: opts.opacity, dash: opts.dashed ? DASH : undefined });
     for (let i = 0; i < MAX_ARCS; i++) {
-      const geo = new BufferGeometry();
-      geo.setAttribute('position', new BufferAttribute(new Float32Array(POINTS * 3), 3));
-      const material = opts.dashed
-        ? new LineDashedMaterial({ color, dashSize: 0.6, gapSize: 0.45, transparent: true, opacity: opts.opacity ?? 1 })
-        : new LineBasicMaterial({ color, transparent: true, opacity: opts.opacity ?? 1 });
-      const line = new Line(geo, material);
-      line.frustumCulled = false;
+      const line = new LineBuffer(this.material, POINTS - 1);
       this.lines.push(line);
-      this.group.add(line);
+      this.group.add(line.object);
     }
   }
 
@@ -42,27 +32,22 @@ export class Track {
    * Arcs about the body we're in are drawn about it now; arcs about a body
    * we'll meet later are drawn where it will be at the encounter.
    */
-  update(arcs: Arc[] | null, now: number, current: Body, dashScale = 1): void {
+  update(arcs: Arc[] | null, now: number, current: Body, unitsPerPx = 1): void {
+    if (this.material.dashed) [this.material.dashSize, this.material.gapSize] = [DASH[0] * unitsPerPx, DASH[1] * unitsPerPx];
     this.lines.forEach((line, i) => {
       const arc = arcs?.[i];
-      line.visible = !!arc;
+      line.object.visible = !!arc;
       if (!arc) return;
       // Vertices stay primary-relative (float32 keeps meters near the craft);
       // the anchor rides in the object's float64 transform.
-      line.position.copy(anchorOf(arc, now, current).multiplyScalar(RENDER_SCALE));
-      const attr = line.geometry.getAttribute('position') as BufferAttribute;
+      line.object.position.copy(anchorOf(arc, now, current).multiplyScalar(RENDER_SCALE));
       const pts = sampleArc(arc);
       for (let k = 0; k < POINTS; k++) {
-        const p = pts[k];
-        attr.setXYZ(k, p.x * RENDER_SCALE, p.y * RENDER_SCALE, p.z * RENDER_SCALE);
+        this.points[k * 3] = pts[k].x * RENDER_SCALE;
+        this.points[k * 3 + 1] = pts[k].y * RENDER_SCALE;
+        this.points[k * 3 + 2] = pts[k].z * RENDER_SCALE;
       }
-      attr.needsUpdate = true;
-      line.geometry.computeBoundingSphere();
-      if (line.material instanceof LineDashedMaterial) {
-        line.material.dashSize = 0.6 * dashScale;
-        line.material.gapSize = 0.45 * dashScale;
-        line.computeLineDistances();
-      }
+      line.setPolyline(this.points);
     });
   }
 

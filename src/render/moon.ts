@@ -1,15 +1,6 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Group,
-  LineBasicMaterial,
-  LineSegments,
-  Mesh,
-  MeshBasicMaterial,
-  SphereGeometry,
-  Vector3,
-} from 'three';
+import { Group, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from 'three';
 import { MOON, RENDER_SCALE } from '../constants';
+import { lineMaterial, segments } from './lines';
 import { FAINT, MOON_LINE, VOID } from './palette';
 import { graticule } from './planet';
 
@@ -36,12 +27,10 @@ function craters(): [number, number, number][] {
 export function createMoon(): Group {
   const group = new Group();
   group.add(new Mesh(new SphereGeometry(R * 0.998, 96, 64), new MeshBasicMaterial({ color: VOID })));
-  group.add(graticule(R * 1.0002, 30, new LineBasicMaterial({ color: FAINT }), 15));
+  group.add(graticule(R * 1.0002, 30, lineMaterial({ color: FAINT, width: 1 }), 15));
   const pts: number[] = [];
   for (const [lat, lon, size] of craters()) ringOnSphere(pts, R * 1.0004, lat, lon, R * size);
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-  group.add(new LineSegments(g, new LineBasicMaterial({ color: MOON_LINE, transparent: true, opacity: 0.75 })));
+  group.add(segments(pts, lineMaterial({ color: MOON_LINE, width: 1.25, opacity: 0.75 })));
   return group;
 }
 

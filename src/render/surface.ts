@@ -1,16 +1,8 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Group,
-  LineBasicMaterial,
-  LineSegments,
-  Mesh,
-  MeshBasicMaterial,
-  Matrix4,
-  Vector3,
-  type Color,
-} from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial, Matrix4, Vector3, type Color } from 'three';
+import type { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { RENDER_SCALE } from '../constants';
+import { lineMaterial, segments } from './lines';
 import { VOID } from './palette';
 
 const CELL = 5_000; // m — the patch re-centers on this lattice so lines never swim
@@ -25,7 +17,7 @@ const COARSE = 10_000; // m grid out to the edge
  */
 export class SurfacePatch {
   readonly group = new Group();
-  private readonly lines: LineSegments;
+  private readonly lines: LineSegments2;
   private readonly ground: Mesh;
   private key = '';
 
@@ -35,7 +27,7 @@ export class SurfacePatch {
     private readonly cratered: boolean,
   ) {
     this.ground = new Mesh(capGeometry(radius - 0.5, EXTENT), new MeshBasicMaterial({ color: VOID }));
-    this.lines = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color, transparent: true, opacity: 0.8 }));
+    this.lines = segments([], lineMaterial({ color, width: 1, opacity: 0.8 }));
     this.group.add(this.ground, this.lines);
     this.group.visible = false;
   }
@@ -59,7 +51,7 @@ export class SurfacePatch {
   }
 
   /** Grid + craters in the patch frame (+Y = local up at the center). */
-  private buildLines(lat: number, lon: number): BufferGeometry {
+  private buildLines(lat: number, lon: number): LineSegmentsGeometry {
     const R = this.radius;
     const pts: number[] = [];
     const onSphere = (x: number, z: number) => new Vector3(x, R, z).setLength(R + 0.5).multiplyScalar(RENDER_SCALE);
@@ -111,9 +103,7 @@ export class SurfacePatch {
         }
       }
     }
-    const g = new BufferGeometry();
-    g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-    return g;
+    return new LineSegmentsGeometry().setPositions(pts);
 
     function crater(x: number, z: number, r: number) {
       const n = 16;
