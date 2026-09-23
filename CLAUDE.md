@@ -50,6 +50,9 @@ stay primary-relative.
   - `nominal.ts` builds the launch state and the AUTO chain of chapter
     starts.
   - `campaign.ts` holds progress in localStorage.
+  - `voice.ts` maps each real Apollo 11 clip (`public/audio/apollo11/`) to
+    its caption. Chapters `say()` them at their moments, and a test keeps
+    the clips and captions in step. `scripts/mission-audio/` recuts them.
 - `src/render/` holds `stage`, `camera` (horizon-frame chase; auto-framed
   map), `world` (per-frame placement), `trajectory`, `surface` (the
   low-altitude patch), `boulders` (the field and the LPD reticle), `ship`,

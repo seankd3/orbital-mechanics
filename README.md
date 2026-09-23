@@ -58,6 +58,10 @@ can start any chapter you've reached from the nominal flight.
 See [`DESIGN.md`](DESIGN.md) for the loop, the grading and what was
 deliberately left out.
 
+The voices are the real Apollo 11 air-to-ground, from NASA Johnson Space
+Center's public-domain highlight reel (see `scripts/mission-audio/`). Their
+use implies no endorsement by NASA.
+
 ## How it works
 
 - **`src/sim/`** is the model, in SI units, with no DOM or three.js scene code.

@@ -116,6 +116,7 @@ function drain(): void {
   for (const e of sim.events) {
     notify(e.text, e.tone);
     if (e.tone === 'good') audio.chime();
+    if (e.voice) audio.voice(e.voice);
   }
   sim.events.length = 0;
 }
@@ -151,6 +152,7 @@ function command(cmd: Command): void {
       if (chapter === CHAPTERS.length - 1) {
         setMode('finale');
         showFinale(campaign);
+        audio.voice('big-board'); // JFK's goal on the Mission Control big board: accomplished
       } else startChapter(chapter + 1, sim.snapshot());
     }
     if (cmd === 'restart' && director) startChapter(chapter, director.start);

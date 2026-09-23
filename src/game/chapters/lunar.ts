@@ -8,6 +8,7 @@ import type { Simulation } from '../../sim/simulation';
 import { solveBraking, solveIntercept, solveOppositeApsis, TARGET } from '../../sim/targeting';
 import { clock, km, range, speed } from '../../ui/format';
 import { starsFor, type Chapter } from '../chapter';
+import { say } from '../voice';
 import { burnSay, engine, holdCue, line, now } from './common';
 
 const R = MOON.radius;
@@ -54,6 +55,9 @@ const INSERTION = (() => {
   return { radius: rf, speed: Math.sqrt(MOON.mu * (2 / rf - 1 / a)) };
 })();
 
+/** Seconds from the start of the countdown clip to "proceed". */
+const COUNTDOWN_LEAD = 9.4;
+
 /** CSM lead angle over the LM at liftoff that sets up TPI about an orbit later. */
 export const ASCENT_LEAD = 0.1; // rad
 
@@ -99,6 +103,7 @@ export const ASCENT: Chapter = {
     ctx.memo.window = liftoffWindow(ctx.sim);
     ctx.sim.ship.dropStage();
     ctx.sim.emit('ASCENT STAGE ARMED — DESCENT STAGE STAYS AS THE LAUNCH PAD', 'info');
+    say(ctx.sim, 'small-step');
   },
   phases: [
     {
@@ -106,6 +111,7 @@ export const ASCENT: Chapter = {
       name: 'LIFTOFF WINDOW',
       // Lighting the APS early ends the wait (and costs the timing star).
       until: (ctx) => (ctx.sim.ship.landed ? ctx.memo.window - 20 : ctx.sim.met),
+      arrive: (ctx) => void (ctx.sim.ship.landed && say(ctx.sim, 'cleared-for-takeoff')),
       say: (ctx) =>
         `EVA COMPLETE. COLUMBIA IS COMING AROUND — YOUR LIFTOFF WINDOW IS IN ${clock(ctx.memo.window - ctx.sim.met)}. G TO WARP.`,
     },
@@ -123,6 +129,19 @@ export const ASCENT: Chapter = {
         const step = dt * Math.min(sim.warp, 10);
         const throttle = sim.ship.landed && sim.met + step < ctx.memo.window ? 0 : Math.min(1, Math.max(0, c.toGo) / (accel * step));
         holdCue(ctx, c.dir, throttle);
+      },
+      tick(ctx) {
+        const sim = ctx.sim;
+        const m = ctx.memo;
+        // Aldrin's countdown, timed so "proceed" lands on the window; then the ride.
+        if (sim.ship.landed && m.countdown === undefined && sim.met >= m.window - COUNTDOWN_LEAD && sim.met < m.window) {
+          m.countdown = 1;
+          say(sim, 'ascent-countdown');
+        }
+        if (!sim.ship.landed && m.ride === undefined) {
+          m.ride = 1;
+          say(sim, 'smooth-ride');
+        }
       },
       done: (ctx) => {
         const sim = ctx.sim;

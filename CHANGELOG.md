@@ -1,5 +1,23 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [4.2.0] - 2026-09-23 — The real voices
+
+### Added
+- **Mission audio.** Twenty lines of the real Apollo 11 air-to-ground play
+  at the moments they happened, each captioned with what was said:
+  - "You are GO for TLI" and "that Saturn gave us a magnificent ride".
+  - "GO for LOI… we'll see you on the other side".
+  - "GO for powered descent", with Houston's answers to the 1202s and the
+    1201, and Duke's "60 seconds" and "30 seconds".
+  - "Contact light" and "Tranquility Base here. The Eagle has landed."
+  - "One small step", "cleared for takeoff", and Aldrin's countdown, timed
+    so "proceed" lands on the liftoff window.
+  - "We got you coming home", the Hornet's visual contact, and the cigars.
+  - On the finale screen, JFK's goal on the Mission Control big board:
+    "…that has been accomplished."
+- Clips are cut from NASA JSC's public-domain highlight reel.
+  `scripts/mission-audio/` reproduces them and verifies each by transcription.
+
 ## [4.1.0] - 2026-09-23 — The landing, as it happened
 
 ### Added

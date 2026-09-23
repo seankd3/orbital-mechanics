@@ -3,6 +3,7 @@ import { MOON_BODY } from '../../sim/bodies';
 import { perilune, solveCircularize, solveMidcourse, solveTli, TARGET } from '../../sim/targeting';
 import { clock, km } from '../../ui/format';
 import { starsFor, type Chapter, type Ctx } from '../chapter';
+import { say } from '../voice';
 import { burnSay, coastPath, engine, line, now } from './common';
 
 const R = MOON.radius;
@@ -23,6 +24,7 @@ export const TLI: Chapter = {
   id: 'tli',
   title: 'TRANS-LUNAR INJECTION',
   summary: 'Light the S-IVB and throw Columbia at the Moon.',
+  begin: (ctx) => say(ctx.sim, 'go-for-tli'),
   phases: [
     {
       kind: 'burn',
@@ -40,6 +42,7 @@ export const TLI: Chapter = {
   finish(ctx) {
     ctx.sim.ship.dropStage();
     ctx.sim.emit('S-IVB SEP — TRANSPOSITION AND DOCKING COMPLETE', 'good');
+    say(ctx.sim, 'magnificent-ride');
   },
   failed: (ctx) => {
     const g = ctx.guide;
@@ -117,6 +120,10 @@ export const LOI: Chapter = {
   id: 'loi',
   title: 'LUNAR ORBIT INSERTION',
   summary: 'Behind the Moon, out of contact: burn retrograde and stay.',
+  begin(ctx) {
+    say(ctx.sim, 'go-for-loi');
+    say(ctx.sim, 'other-side');
+  },
   phases: [
     {
       kind: 'burn',

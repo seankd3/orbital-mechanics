@@ -139,10 +139,10 @@ describe('a hand-flown landing', () => {
       d.preStep(DT, hovering ? 1 : 0); // …and hold Shift: climb, never land
       sim.step(DT);
       d.postStep();
-      for (const e of sim.events) if (/SECONDS|BINGO/.test(e.text)) calls.push(e.text);
+      for (const e of sim.events) if (/SECONDS|BINGO/.test(e.text)) calls.push(e.voice ?? e.text);
       sim.events.length = 0;
     }
-    expect(calls).toEqual(['60 SECONDS', '30 SECONDS', 'BINGO — LAND IT OR LOSE IT']);
+    expect(calls).toEqual(['sixty-seconds', 'thirty-seconds', 'BINGO — LAND IT OR LOSE IT']);
     expect(d.status).toBe('failed'); // dry tanks at altitude
   });
 
