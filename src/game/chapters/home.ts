@@ -6,6 +6,7 @@ import type { Simulation } from '../../sim/simulation';
 import { earthArc, entryAngle, solveEntryCorridor, solveTei, TARGET } from '../../sim/targeting';
 import { clock, degrees, km, speed } from '../../ui/format';
 import { starsFor, type Chapter, type Ctx } from '../chapter';
+import { say } from '../voice';
 import { burnSay, coastPath, DEG, engine, line, now } from './common';
 
 /** The coast's leg that actually reaches entry interface, if any. */
@@ -37,6 +38,7 @@ export const TEI: Chapter = {
     if (ctx.guide?.phase !== 'done') return null;
     return predictedEntry(ctx.sim) === null ? 'NOT ON A RETURN TRAJECTORY' : null;
   },
+  finish: (ctx) => say(ctx.sim, 'coming-home'),
   grade(ctx) {
     const gamma = predictedEntry(ctx.sim);
     const err = gamma === null ? Infinity : Math.abs(gamma - TARGET.entryAngle);
@@ -104,6 +106,12 @@ export const ENTRY: Chapter = {
         sim.hold = null;
         sim.rotation = { pitch: 0, yaw: 0, roll: rollCommand(sim) };
       },
+      tick(ctx) {
+        if (ctx.sim.chutes === 'mains' && ctx.memo.sighted === undefined) {
+          ctx.memo.sighted = 1;
+          say(ctx.sim, 'visual-contact');
+        }
+      },
       done: (ctx) => ctx.sim.outcome?.kind === 'splashdown',
       say: (ctx) => entryCall(ctx),
     },
@@ -119,6 +127,7 @@ export const ENTRY: Chapter = {
     }
     return null;
   },
+  finish: (ctx) => say(ctx.sim, 'cigars'),
   grade(ctx) {
     const g = ctx.sim.peakG;
     return {
