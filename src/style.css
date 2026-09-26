@@ -157,6 +157,8 @@ b { font-weight: 500; }
 .chapters li.sel { background: rgba(255, 181, 71, 0.07); box-shadow: inset 2px 0 var(--plan); }
 .keys { color: var(--dim); font-size: 10px; letter-spacing: 0.2em; }
 .keys b { color: var(--ink); }
+.panel .watch { display: inline-block; margin-top: 14px; color: var(--plan); text-decoration: none; font-size: 10px; letter-spacing: 0.3em; }
+.panel .watch:hover, .panel .watch:focus-visible { text-decoration: underline; outline: none; }
 .stars-big { font-size: 34px; letter-spacing: 0.3em; color: var(--plan); margin: 10px 0 14px; }
 .stars-big .off { color: var(--faint); }
 .result { border-top: 1px solid var(--line); margin-bottom: 20px; }
