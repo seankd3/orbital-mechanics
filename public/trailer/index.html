@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#030506" />
+  <title>ORBITAL — Trailer</title>
+  <meta name="description" content="Fly Apollo 11 from Earth orbit to the Sea of Tranquility and home. The trailer, made from the game itself." />
+  <meta property="og:type" content="video.other" />
+  <meta property="og:title" content="ORBITAL — Fly Apollo 11" />
+  <meta property="og:description" content="Fly Apollo 11 from Earth orbit to the Sea of Tranquility and home." />
+  <meta property="og:image" content="https://seankennethdoherty.com/play/orbital-mechanics/trailer/poster.jpg" />
+  <meta property="og:video" content="https://seankennethdoherty.com/play/orbital-mechanics/trailer/orbital-trailer.mp4" />
+  <meta property="og:video:type" content="video/mp4" />
+  <meta property="og:video:width" content="1920" />
+  <meta property="og:video:height" content="1080" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    :root {
+      --ink: #d9e4df;
+      --dim: #6f817a;
+      --line: #1a2320;
+      --plan: #ffb547;
+      --bg: #030506;
+      --mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+    body {
+      font: 12px/1.45 var(--mono);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px 16px;
+    }
+    main { width: min(1280px, 100%); }
+    header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 22px; font-weight: 400; letter-spacing: 0.5em; }
+    h2 { margin: 0 0 4px; font-size: 11px; font-weight: 400; letter-spacing: 0.4em; color: var(--dim); }
+    video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); }
+    footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+    a.fly { color: var(--plan); text-decoration: none; letter-spacing: 0.3em; font-size: 12px; border: 1px solid var(--plan); padding: 8px 16px; }
+    a.fly:hover, a.fly:focus-visible { background: rgba(255, 181, 71, 0.08); outline: none; }
+    .credit { color: var(--dim); font-size: 10px; letter-spacing: 0.02em; text-transform: none; max-width: 640px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h2>APOLLO 11 · JULY 1969</h2>
+        <h1>ORBITAL</h1>
+      </div>
+      <a class="fly" href="../">FLY IT →</a>
+    </header>
+    <video controls playsinline preload="metadata" poster="poster.jpg">
+      <source src="orbital-trailer.mp4" type="video/mp4" />
+      <a href="orbital-trailer.mp4">Download the trailer (MP4)</a>
+    </video>
+    <footer>
+      <p class="credit">Every shot is the game, flown live. Mission audio: NASA Johnson Space Center, Apollo 11 air-to-ground (public domain). No NASA endorsement implied.</p>
+    </footer>
+  </main>
+</body>
+</html>

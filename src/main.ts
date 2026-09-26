@@ -332,7 +332,7 @@ if (import.meta.env.DEV) {
   // Test harness: drive the loop directly when rAF is throttled.
   Object.assign(window, {
     __game: {
-      sim, campaign, nominal, rig, CHAPTERS,
+      sim, campaign, nominal, rig, world, stage, CHAPTERS,
       get director() { return director; },
       get mode() { return mode; },
       update,

@@ -73,7 +73,9 @@ export class SurfacePatch {
         segment(-half, u, half, u, n, spacing);
       }
     };
-    grid(100, 1_500, 30); // touchdown scale
+    // Touchdown scale. The patch snaps to a CELL lattice, so the craft can be
+    // up to CELL/2 off center: cover that too, or a landed LM sits on bare ground.
+    grid(100, CELL / 2 + 1_500, (CELL / 2 + 1_500) / 100);
     grid(FINE, 12_000, 24);
     grid(COARSE, EXTENT * 0.7, 64);
 

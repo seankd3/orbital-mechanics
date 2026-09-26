@@ -30,6 +30,7 @@ export function showMenu(campaign: Campaign, selected: number, onPick: (i: numbe
       <p class="lead">Fly the first landing from Earth orbit to the Sea of Tranquility and home. Houston tells you what comes next and why; you fly it. Every chapter is graded — ★★★ takes a clean hand-flown job.</p>
       <ul class="chapters">${items}</ul>
       <div class="keys">${cont}↑↓ SELECT · <b>ENTER</b> FLY · ${campaign.totalStars}/${CHAPTERS.length * 3} ★</div>
+      <a class="watch" href="trailer/">▶ WATCH THE TRAILER</a>
     </div>`;
   root().hidden = false;
   root().querySelectorAll<HTMLElement>('li[data-i]').forEach((li) => {

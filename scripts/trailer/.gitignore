@@ -1,0 +1,13 @@
+# Inputs fetched per the README, and everything the pipeline makes.
+jbmono.woff2
+highlights.mp3
+frames/
+overlay/
+seq/
+probe/
+black.jpg
+timeline.json
+*.log
+*.wav
+*.mp4
+sheet-*.jpg

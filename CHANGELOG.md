@@ -1,5 +1,17 @@
 # Orbital Mechanics Simulator - Changelog
 
+## [4.3.0] - 2026-09-26 — The trailer
+
+### Added
+- **Trailer.** A 2½-minute trailer made from the game itself, flown live
+  from Earth orbit to splashdown under the real air-to-ground. It has its
+  own page at `trailer/`, and the menu links to it ("▶ Watch the trailer").
+  `scripts/trailer/` re-records it.
+
+### Fixed
+- A landed LM no longer sits on bare ground: the touchdown grid now covers
+  the whole surface patch cell under it.
+
 ## [4.2.0] - 2026-09-23 — The real voices
 
 ### Added
