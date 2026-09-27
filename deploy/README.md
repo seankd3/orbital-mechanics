@@ -1,16 +1,14 @@
 # Deploying
 
-The game lives at `seankennethdoherty.com/play/orbital-mechanics/` but deploys
-on its own, so the photography site's Pages project (a Direct Upload) never
-has to carry it:
+The game ships inside Sean's site, `seankd3/Sean-Kenneth-Doherty` (branch `legacy/master`), as a
+static folder served at `seankennethdoherty.com/play/orbital-mechanics/`:
 
-1. **Pages project `orbital-mechanics`**, connected to this repo: production
-   branch `main`, build command `npm run build`, output directory `dist`.
-   Every merge to `main` deploys it to `orbital-mechanics.pages.dev`.
-2. **Worker `orbital-route`** (`route-worker.js`) on the route
-   `seankennethdoherty.com/play/orbital-mechanics*`. It serves that path from
-   the Pages project. If Cloudflare gave the project a different
-   `*.pages.dev` name, set `ORIGIN` to it.
+```sh
+npm run build
+rm -rf ../sean-kenneth-doherty/app/public/play/orbital-mechanics
+cp -r dist ../sean-kenneth-doherty/app/public/play/orbital-mechanics
+```
 
-Worker routes run before the photography site, so the old copy of the game
-inside its upload is simply shadowed.
+Then follow that repo's `CLAUDE.md`. Its deploys are Cloudflare Pages uploads of the whole site,
+and they go live only with Sean's go-ahead. Keep every file under 25 MiB, including the trailer
+in `public/trailer/`.

@@ -19,8 +19,8 @@ npm run check   # tsc --noEmit + vitest (includes the full-mission flight)
 npm run build   # tsc + vite build (base './' for subpath hosting)
 ```
 
-Hosted at seankennethdoherty.com/play/orbital-mechanics/. Never deploy or
-republish without Sean's explicit approval.
+Hosted at seankennethdoherty.com/play/orbital-mechanics/, inside the site repo
+(see `deploy/README.md`). Never deploy or republish without Sean's explicit approval.
 
 ## Architecture
 
