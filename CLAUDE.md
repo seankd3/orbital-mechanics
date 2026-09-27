@@ -19,8 +19,8 @@ npm run check   # tsc --noEmit + vitest (includes the full-mission flight)
 npm run build   # tsc + vite build (base './' for subpath hosting)
 ```
 
-Hosted at seankennethdoherty.com/play/orbital-mechanics/. Never deploy or
-republish without Sean's explicit approval.
+Hosted at seankennethdoherty.com/play/orbital-mechanics/, inside the site repo
+(see `deploy/README.md`). Never deploy or republish without Sean's explicit approval.
 
 ## Architecture
 
@@ -78,11 +78,12 @@ Conventions:
 - Tests live next to the code (`*.test.ts`). Physics changes need a test
   showing that the prediction matches the flown result.
 
-In dev, `window.__game` exposes `{sim, director, mode, rig, campaign, nominal,
+In dev, `window.__game` exposes `{sim, director, mode, rig, world, stage, campaign, nominal,
 start(i), command(cmd), update(dt), advance(steps, dt)}`. `advance` flies
 without drawing each frame, which is useful when rAF is throttled or
 rendering in software GL. `scripts/fly-mission.mjs` flies the whole mission
-through it and saves screenshots.
+through it and saves screenshots. `scripts/trailer/` records the trailer the
+same way.
 
 ## Style
 
