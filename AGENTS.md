@@ -1,7 +1,3 @@
-# Agent instructions
-
-Read and follow [`CLAUDE.md`](CLAUDE.md): it is this repo's instruction file.
-
 <!-- REVIEW_CHARTER_START 2026-10-21 -->
 ## When you review (Sean, 2026-10-21)
 Sean: "when sol is reviewing code, instead of just looking for bugs it also steps back from the problem and tries to find a more elegant first principles solution, and stands guard against code and test bloat, band aid hacks, and always tries to push the main agent towards a more elegant, solution." Then: "it should be able to take a step back look at the bigger picture, and call out if theres a more elegant long term solution, rather than just give a bunch of super rare and unlikely bug cases that need lots of bandaids to cover up. I want the robust, elegant long term shape, and the review agents job is to always look for that sort of thing." And: "the goal is robustness through elegance and simplicity."
